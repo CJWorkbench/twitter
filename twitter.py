@@ -490,6 +490,7 @@ def _render_file_format_v1(
     table = pa.Table.from_batches(record_batches, schema=ARROW_SCHEMA)
     if len(table) > TWITTER_MAX_ROWS_PER_TABLE:
         table = table.slice(0, TWITTER_MAX_ROWS_PER_TABLE)
+    table = table.combine_chunks()  # Workbench needs max 1 record batch
     return table, []
 
 
