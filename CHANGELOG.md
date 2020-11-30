@@ -13,6 +13,10 @@
   clear the error and continue accumulating.
 * Use less CPU and memory during fetch (at the expense of more CPU and
   memory during render, which is where we want it).
+* When not using "Accumulate tweets", every request will produce a new
+  version. That's because Twitter's API responses contain small differences,
+  even when the final table looks the same. (Previously we stored the final
+  table. Now we store the API responses.)
 * "Search": use Twitter API v2. This gives nicer error messages for search
   syntax errors.
 * Use `httpx` for fetches. This gives nicer error messages for network
