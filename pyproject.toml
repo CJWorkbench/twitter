@@ -64,5 +64,4 @@ deps =
 commands =
   pip install -q .
   pytest -s -v --cov=twitter --cov-report=term-missing
-  coverage report
 """
