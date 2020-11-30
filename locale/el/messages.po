@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2020-11-30 16:17+0000\n"
+"POT-Creation-Date: 2020-11-30 18:53+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: el\n"
@@ -52,39 +52,39 @@ msgstr ""
 msgid "_spec.parameters.accumulate.name"
 msgstr ""
 
-#: twitter.py:417
+#: twitter.py:439
 msgid "error.tooManyRequests"
 msgstr ""
 
-#: twitter.py:425
+#: twitter.py:447
 msgid "error.userDoesNotExist"
 msgstr ""
 
-#: twitter.py:431
+#: twitter.py:453
 msgid "error.userTweetsArePrivate"
 msgstr ""
 
-#: twitter.py:439
+#: twitter.py:461
 msgid "error.genericApiErrorV1_1"
 msgstr ""
 
-#: twitter.py:445
+#: twitter.py:471
 msgid "error.genericApiErrorV2"
 msgstr ""
 
-#: twitter.py:540
+#: twitter.py:577
 msgid "error.invalidList"
 msgstr ""
 
-#: twitter.py:550
+#: twitter.py:587
 msgid "error.invalidUsername"
 msgstr ""
 
-#: twitter.py:1048
+#: twitter.py:1085
 msgid "error.noQuery"
 msgstr ""
 
-#: twitter.py:1055
+#: twitter.py:1092
 msgid "error.noCredentials"
 msgstr ""
 

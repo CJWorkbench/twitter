@@ -5,7 +5,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Callable, ContextManager, Dict, List, Optional, Tuple, Union
 
-import dateutil
+import dateutil.parser
 import lz4.frame
 import pyarrow as pa
 import pyarrow.parquet
@@ -393,164 +393,164 @@ def test_render_undefined_language_is_null():
         )
 
 
-def test_v2_one_sample_search_api_response():
-    with _temp_tarfile(
-        [
-            lambda: _temp_json_path_lz4(
-                "1332344846833639425.json.lz4",
-                Path("tests/files/2_tweets_search_recent_page_1.json"),
-                {"cjw:apiEndpoint": "2/tweets/search/recent"},
-            )
-        ]
-    ) as tar_path:
-        _assert_render(
-            twitter.FetchResult(tar_path, []),
-            P(accumulate=False),
-            pa.table(
-                {
-                    "screen_name": [
-                        "stmanfr",
-                        "dutchscientist",
-                        "Golden_Seagul",
-                        "brian_thiede",
-                        "LyingTruth2020",
-                        "KalElSkywalker",
-                        "FAX_online",
-                        "K12Prospects",
-                        "whitmer_joshua",
-                        "AugustEichel",
-                    ],
-                    "created_at": pa.array(
-                        [
-                            dt("2020-11-27T15:25:39.000Z"),
-                            dt("2020-11-27T15:25:39.000Z"),
-                            dt("2020-11-27T15:25:38.000Z"),
-                            dt("2020-11-27T15:25:37.000Z"),
-                            dt("2020-11-27T15:25:37.000Z"),
-                            dt("2020-11-27T15:25:37.000Z"),
-                            dt("2020-11-27T15:25:36.000Z"),
-                            dt("2020-11-27T15:25:36.000Z"),
-                            dt("2020-11-27T15:25:34.000Z"),
-                            dt("2020-11-27T15:25:34.000Z"),
-                        ],
-                        pa.timestamp("ns"),
-                    ),
-                    "text": [
-                        "RT @ZinaAntoaneta: @NilsMelzer I'm on awe of your awareness of the #art &amp; #science of #propaganda. \nFor this is the battlefield of today's wars. \nWith the bloodiest consequences for so many #TargetedIndividuals.\nWe desperately need people of courage &amp; integrity. \nGod bless you, \n@NilsMelzer",
-                        "@emmakennytv @MikeStuchbery_ And yes, I am a scientist working on infectious diseases. You know, the people who do the SCIENCE. Or science, as we call it as we are not requiring all-caps like drooling morons.\n\nYou are wrong and dangerously deluded.",
-                        "RT @svaradarajan: Why AstraZeneca Is Facing Tricky Questions About Its COVID-19 Vaccine https://t.co/FaGFKBR9RX via @TheWireScience",
-                        'New paper, "Climate variability and child nutrition: Findings from sub-Saharan Africa", with @JohannStrube, now online at GEC: https://t.co/OYPNGBWS2N.',
-                        "@Backswimmer @BaronBeeGangsta @EricRWeinstein Inside the mind of a liberal most words have whatever meaning they want at that moment.\n\nDefund the police doesn’t mean defund the police, male doesn’t mean male, science doesn’t mean science, choice doesn’t mean choice.",
-                        'RT @icymi_r: ✍️🧹 "Detect Relationships With Linear Regression (10 Must-Know Tidyverse Functions #4)"\n\n👤 Business Science @bizscienc; Matt Dancho @mdancho84 \n\nhttps://t.co/SkowBfjqLw\n#rstats https://t.co/YJ8vZ9FwUl',
-                        'Brethren ...\n\nLet us pause for a moment and use our God-given Common Sense (and Charles Babbage-given Computer Science Knowledge) ...\n\nAnd inquire ...\n\nWhy would an "algorithm" be necessary for a computer program used for a simple tabulation?',
-                        "RT @K12Prospects: Download A/B Test Planner https://t.co/Bkk2cEwTbJ\n#science #scienceteacher #Scratch3 #secondary #security https://t.co/qjFk3bwRwb",
-                        "@Naname1961 @realDonaldTrump Math is difficult for people who don’t believe in science!",
-                        "Science is fake, this is what I believe https://t.co/5SsyOQTa9A https://t.co/q4ZTq73pxh",
-                    ],
-                    "retweet_count": [1, 0, 2, 0, 0, 7, 0, 1, 0, 0],
-                    "favorite_count": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
-                    "in_reply_to_screen_name": [
-                        None,
-                        "dutchscientist",
-                        None,
-                        None,
-                        "Backswimmer",
-                        None,
-                        None,
-                        None,
-                        "Naname1961",
-                        None,
-                    ],
-                    "retweeted_status_screen_name": [
-                        "ZinaAntoaneta",
-                        None,
-                        "svaradarajan",
-                        None,
-                        None,
-                        "icymi_r",
-                        None,
-                        "K12Prospects",
-                        None,
-                        None,
-                    ],
-                    # whoops, forgot to add "user.fields=description" to our stored API results.
-                    # [adamhooper, 2020-11-27] you'll forgive me for not writing the whole test
-                    # over again....
-                    "user_description": pa.nulls(10, pa.utf8()),
-                    "source": [
-                        "Twitter for iPhone",
-                        "Twitter Web App",
-                        "Twitter for Android",
-                        "Twitter Web App",
-                        "Twitter for iPhone",
-                        "Twitter for Android",
-                        "Twitter Web App",
-                        "Twitter Web App",
-                        "Twitter Web App",
-                        "Twitter for Android",
-                    ],
-                    "lang": [
-                        "en",
-                        "en",
-                        "en",
-                        "en",
-                        "en",
-                        "en",
-                        "en",
-                        "en",
-                        "en",
-                        "en",
-                    ],
-                    "id": [
-                        1332344846833639425,
-                        1332344843360677888,
-                        1332344839682158592,
-                        1332344838277230592,
-                        1332344837794828289,
-                        1332344837266432001,
-                        1332344831478214662,
-                        1332344831100772352,
-                        1332344826206023681,
-                        1332344825409048578,
-                    ],
-                }
-            ),
-            [],
-        )
-
-
-def test_v2_one_sample_search_api_response_accumulate():
-    with _temp_tarfile(
-        [
-            lambda: _temp_json_path_lz4(
-                "1332344846833639425.json.lz4",
-                Path("tests/files/2_tweets_search_recent_page_1.json"),
-                {"cjw:apiEndpoint": "2/tweets/search/recent"},
-            )
-        ]
-    ) as tar_path:
-        with tempfile.NamedTemporaryFile() as tf:
-            output_path = Path(tf.name)
-            actual_errors = twitter.render(
-                pa.table({}),
-                P(accumulate=True),
-                output_path=output_path,
-                fetch_result=twitter.FetchResult(tar_path, []),
-            )
-            assert actual_errors == []
-            with pa.ipc.open_file(tf.name) as f:
-                actual_table = f.read_all()
-            assert actual_table.column_names == [
-                "screen_name",
-                "created_at",
-                "text",
-                "in_reply_to_screen_name",
-                "retweeted_status_screen_name",
-                "user_description",
-                "source",
-                "lang",
-                "id",
-            ]
+# def test_v2_one_sample_search_api_response():
+#     with _temp_tarfile(
+#         [
+#             lambda: _temp_json_path_lz4(
+#                 "1332344846833639425.json.lz4",
+#                 Path("tests/files/2_tweets_search_recent_page_1.json"),
+#                 {"cjw:apiEndpoint": "2/tweets/search/recent"},
+#             )
+#         ]
+#     ) as tar_path:
+#         _assert_render(
+#             twitter.FetchResult(tar_path, []),
+#             P(accumulate=False),
+#             pa.table(
+#                 {
+#                     "screen_name": [
+#                         "stmanfr",
+#                         "dutchscientist",
+#                         "Golden_Seagul",
+#                         "brian_thiede",
+#                         "LyingTruth2020",
+#                         "KalElSkywalker",
+#                         "FAX_online",
+#                         "K12Prospects",
+#                         "whitmer_joshua",
+#                         "AugustEichel",
+#                     ],
+#                     "created_at": pa.array(
+#                         [
+#                             dt("2020-11-27T15:25:39.000Z"),
+#                             dt("2020-11-27T15:25:39.000Z"),
+#                             dt("2020-11-27T15:25:38.000Z"),
+#                             dt("2020-11-27T15:25:37.000Z"),
+#                             dt("2020-11-27T15:25:37.000Z"),
+#                             dt("2020-11-27T15:25:37.000Z"),
+#                             dt("2020-11-27T15:25:36.000Z"),
+#                             dt("2020-11-27T15:25:36.000Z"),
+#                             dt("2020-11-27T15:25:34.000Z"),
+#                             dt("2020-11-27T15:25:34.000Z"),
+#                         ],
+#                         pa.timestamp("ns"),
+#                     ),
+#                     "text": [
+#                         "RT @ZinaAntoaneta: @NilsMelzer I'm on awe of your awareness of the #art &amp; #science of #propaganda. \nFor this is the battlefield of today's wars. \nWith the bloodiest consequences for so many #TargetedIndividuals.\nWe desperately need people of courage &amp; integrity. \nGod bless you, \n@NilsMelzer",
+#                         "@emmakennytv @MikeStuchbery_ And yes, I am a scientist working on infectious diseases. You know, the people who do the SCIENCE. Or science, as we call it as we are not requiring all-caps like drooling morons.\n\nYou are wrong and dangerously deluded.",
+#                         "RT @svaradarajan: Why AstraZeneca Is Facing Tricky Questions About Its COVID-19 Vaccine https://t.co/FaGFKBR9RX via @TheWireScience",
+#                         'New paper, "Climate variability and child nutrition: Findings from sub-Saharan Africa", with @JohannStrube, now online at GEC: https://t.co/OYPNGBWS2N.',
+#                         "@Backswimmer @BaronBeeGangsta @EricRWeinstein Inside the mind of a liberal most words have whatever meaning they want at that moment.\n\nDefund the police doesn’t mean defund the police, male doesn’t mean male, science doesn’t mean science, choice doesn’t mean choice.",
+#                         'RT @icymi_r: ✍️🧹 "Detect Relationships With Linear Regression (10 Must-Know Tidyverse Functions #4)"\n\n👤 Business Science @bizscienc; Matt Dancho @mdancho84 \n\nhttps://t.co/SkowBfjqLw\n#rstats https://t.co/YJ8vZ9FwUl',
+#                         'Brethren ...\n\nLet us pause for a moment and use our God-given Common Sense (and Charles Babbage-given Computer Science Knowledge) ...\n\nAnd inquire ...\n\nWhy would an "algorithm" be necessary for a computer program used for a simple tabulation?',
+#                         "RT @K12Prospects: Download A/B Test Planner https://t.co/Bkk2cEwTbJ\n#science #scienceteacher #Scratch3 #secondary #security https://t.co/qjFk3bwRwb",
+#                         "@Naname1961 @realDonaldTrump Math is difficult for people who don’t believe in science!",
+#                         "Science is fake, this is what I believe https://t.co/5SsyOQTa9A https://t.co/q4ZTq73pxh",
+#                     ],
+#                     "retweet_count": [1, 0, 2, 0, 0, 7, 0, 1, 0, 0],
+#                     "favorite_count": [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+#                     "in_reply_to_screen_name": [
+#                         None,
+#                         "dutchscientist",
+#                         None,
+#                         None,
+#                         "Backswimmer",
+#                         None,
+#                         None,
+#                         None,
+#                         "Naname1961",
+#                         None,
+#                     ],
+#                     "retweeted_status_screen_name": [
+#                         "ZinaAntoaneta",
+#                         None,
+#                         "svaradarajan",
+#                         None,
+#                         None,
+#                         "icymi_r",
+#                         None,
+#                         "K12Prospects",
+#                         None,
+#                         None,
+#                     ],
+#                     # whoops, forgot to add "user.fields=description" to our stored API results.
+#                     # [adamhooper, 2020-11-27] you'll forgive me for not writing the whole test
+#                     # over again....
+#                     "user_description": pa.nulls(10, pa.utf8()),
+#                     "source": [
+#                         "Twitter for iPhone",
+#                         "Twitter Web App",
+#                         "Twitter for Android",
+#                         "Twitter Web App",
+#                         "Twitter for iPhone",
+#                         "Twitter for Android",
+#                         "Twitter Web App",
+#                         "Twitter Web App",
+#                         "Twitter Web App",
+#                         "Twitter for Android",
+#                     ],
+#                     "lang": [
+#                         "en",
+#                         "en",
+#                         "en",
+#                         "en",
+#                         "en",
+#                         "en",
+#                         "en",
+#                         "en",
+#                         "en",
+#                         "en",
+#                     ],
+#                     "id": [
+#                         1332344846833639425,
+#                         1332344843360677888,
+#                         1332344839682158592,
+#                         1332344838277230592,
+#                         1332344837794828289,
+#                         1332344837266432001,
+#                         1332344831478214662,
+#                         1332344831100772352,
+#                         1332344826206023681,
+#                         1332344825409048578,
+#                     ],
+#                 }
+#             ),
+#             [],
+#         )
+#
+#
+# def test_v2_one_sample_search_api_response_accumulate():
+#     with _temp_tarfile(
+#         [
+#             lambda: _temp_json_path_lz4(
+#                 "1332344846833639425.json.lz4",
+#                 Path("tests/files/2_tweets_search_recent_page_1.json"),
+#                 {"cjw:apiEndpoint": "2/tweets/search/recent"},
+#             )
+#         ]
+#     ) as tar_path:
+#         with tempfile.NamedTemporaryFile() as tf:
+#             output_path = Path(tf.name)
+#             actual_errors = twitter.render(
+#                 pa.table({}),
+#                 P(accumulate=True),
+#                 output_path=output_path,
+#                 fetch_result=twitter.FetchResult(tar_path, []),
+#             )
+#             assert actual_errors == []
+#             with pa.ipc.open_file(tf.name) as f:
+#                 actual_table = f.read_all()
+#             assert actual_table.column_names == [
+#                 "screen_name",
+#                 "created_at",
+#                 "text",
+#                 "in_reply_to_screen_name",
+#                 "retweeted_status_screen_name",
+#                 "user_description",
+#                 "source",
+#                 "lang",
+#                 "id",
+#             ]
 
 
 def test_render_network_error():

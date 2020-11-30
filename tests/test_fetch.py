@@ -733,379 +733,379 @@ def test_list_statuses_list_id(httpx_mock: HTTPXMock):
         ]
 
 
-def test_search(httpx_mock: HTTPXMock):
-    httpx_mock.add_response(
-        url="https://api.twitter.com/2/tweets/search/recent?expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&query=science&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname",
-        data=Path("tests/files/2_tweets_search_recent_page_1.json").read_bytes(),
-        headers={"date": "Fri, 27 Nov 2020 15:25:50 GMT"},
-        status_code=200,
-    )
-    httpx_mock.add_response(
-        url="https://api.twitter.com/2/tweets/search/recent?expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&next_token=b26v89c19zqg8o3fosesr6z0c2eac8nalgxjenpv5qjy5&query=science&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname",
-        # We nixed the "next_token" from 2_tweets_search_recent_page_2.json.
-        data=Path("tests/files/2_tweets_search_recent_page_2.json").read_bytes(),
-        headers={"date": "Fri, 27 Nov 2020 15:29:05 GMT"},
-        status_code=200,
-    )
-
-    with tempfile.NamedTemporaryFile() as tf:
-        result = twitter.fetch_arrow(
-            P(querytype="search", query="science", accumulate=False),
-            secrets={"twitter_credentials": DefaultSecret},
-            last_fetch_result=None,
-            input_table_parquet_path=None,
-            output_path=Path(tf.name),
-        )
-        assert result.errors == []
-        result_file = twitter.FetchResultFile(result.path)
-        parts = result_file.get_result_parts()
-
-        page1 = next(parts)
-        assert page1.name == "1332344846833639425.json.lz4"
-        assert page1.api_endpoint == "2/tweets/search/recent"
-        assert page1.n_tweets == 10
-        assert (
-            page1.api_params
-            == "expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&query=science&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname"
-        )
-
-        page2 = next(parts)
-        assert page2.name == "1332344823462965250.json.lz4"
-        assert page2.n_tweets == 10
-
-        with pytest.raises(StopIteration):
-            next(parts)
-
-
-def test_search_empty_results(httpx_mock: HTTPXMock):
-    httpx_mock.add_response(
-        url="https://api.twitter.com/2/tweets/search/recent?expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&query=nobodywrotethistextever&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname",
-        data=b'{"meta":{"result_count":0}}',
-        headers={"date": "Thu, 26 Nov 2020 15:21:40 GMT"},
-        status_code=200,
-    )
-
-    with tempfile.NamedTemporaryFile() as tf:
-        result = twitter.fetch_arrow(
-            P(querytype="search", query="nobodywrotethistextever", accumulate=False),
-            secrets={"twitter_credentials": DefaultSecret},
-            last_fetch_result=None,
-            input_table_parquet_path=None,
-            output_path=Path(tf.name),
-        )
-        assert result.errors == []
-        result_file = twitter.FetchResultFile(result.path)
-        assert not list(result_file.get_result_parts())
-
-
-def test_search_accumulate_empty_results(httpx_mock: HTTPXMock):
-    httpx_mock.add_response(
-        url="https://api.twitter.com/2/tweets/search/recent?expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&query=nobodywrotethistextever&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname",
-        data=b'{"meta":{"result_count":0}}',
-        headers={"date": "Thu, 26 Nov 2020 15:21:40 GMT"},
-        status_code=200,
-    )
-
-    with tempfile.NamedTemporaryFile() as tf:
-        with tempfile.NamedTemporaryFile() as tarfile_tf:
-            with tarfile.open(tarfile_tf.name, "w"):
-                pass  # just write an empty tarfile
-            result = twitter.fetch_arrow(
-                P(querytype="search", query="nobodywrotethistextever", accumulate=True),
-                secrets={"twitter_credentials": DefaultSecret},
-                last_fetch_result=twitter.FetchResult(Path(tarfile_tf.name)),
-                input_table_parquet_path=None,
-                output_path=Path(tf.name),
-            )
-        assert result.errors == []
-        result_file = twitter.FetchResultFile(result.path)
-        assert not list(result_file.get_result_parts())
-
-
-def test_search_accumulate_recover_after_bug_160258591(httpx_mock: HTTPXMock):
-    # https://www.pivotaltracker.com/story/show/160258591
-    # 'id', 'retweet_count' and 'favorite_count' had type=text after
-    # accumulating an empty table. In file format v0, that postprocessing
-    # happened during fetch -- so the _stored_ data has the wrong type. We
-    # need to support this forever.
-    httpx_mock.add_response(
-        url="https://api.twitter.com/2/tweets/search/recent?expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&query=science&since_id=656444340701634560&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname",
-        data=Path("tests/files/2_tweets_search_recent_page_2.json").read_bytes(),
-        headers={"date": "Fri, 27 Nov 2020 15:25:50 GMT"},
-        status_code=200,
-    )
-
-    with tempfile.NamedTemporaryFile() as tf:
-        with _temp_parquet_file(
-            pa.table({"id": ["656444340701634560"]})
-        ) as parquet_path:
-            parquet_bytes = parquet_path.read_bytes()
-            result = twitter.fetch_arrow(
-                P(querytype="search", query="science", accumulate=True),
-                secrets={"twitter_credentials": DefaultSecret},
-                last_fetch_result=twitter.FetchResult(parquet_path),
-                input_table_parquet_path=None,
-                output_path=Path(tf.name),
-            )
-        assert result.errors == []
-        result_file = twitter.FetchResultFile(result.path)
-        assert list(result_file.get_result_parts())[1].body == parquet_bytes
-
-
-def test_search_accumulate_delete_empty_parquet(httpx_mock: HTTPXMock):
-    httpx_mock.add_response(
-        url="https://api.twitter.com/2/tweets/search/recent?expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&query=science&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname",
-        data=Path("tests/files/2_tweets_search_recent_page_2.json").read_bytes(),
-        headers={"date": "Fri, 27 Nov 2020 15:25:50 GMT"},
-        status_code=200,
-    )
-
-    with tempfile.NamedTemporaryFile() as tf:
-        with _temp_parquet_file(twitter.ARROW_SCHEMA.empty_table()) as parquet_path:
-            result = twitter.fetch_arrow(
-                P(querytype="search", query="science", accumulate=True),
-                secrets={"twitter_credentials": DefaultSecret},
-                last_fetch_result=twitter.FetchResult(parquet_path),
-                input_table_parquet_path=None,
-                output_path=Path(tf.name),
-            )
-        assert result.errors == []
-        result_file = twitter.FetchResultFile(result.path)
-        assert list(part.name for part in result_file.get_result_parts()) == [
-            "1332344823462965250.json.lz4"
-        ]
-
-
-def test_search_accumulate_read_max_tweet_id_from_legacy_parquet(httpx_mock: HTTPXMock):
-    httpx_mock.add_response(
-        url="https://api.twitter.com/2/tweets/search/recent?expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&query=science&since_id=15&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname",
-        data=Path("tests/files/2_tweets_search_recent_page_2.json").read_bytes(),
-        headers={"date": "Fri, 27 Nov 2020 15:25:50 GMT"},
-        status_code=200,
-    )
-
-    with tempfile.NamedTemporaryFile() as tf:
-        with _temp_parquet_file(
-            pa.table({"id": pa.array([15, 14, 13], pa.int64())})
-        ) as parquet_path:
-            parquet_bytes = parquet_path.read_bytes()
-        with tempfile.NamedTemporaryFile() as tarfile_tf:
-            with tarfile.open(tarfile_tf.name, "w") as tar:
-                ti = tarfile.TarInfo("API-ERROR.lz4")
-                ti.size = len(b"unused contents")
-                ti.pax_headers["cjw:apiEndpoint"] = "2/tweets/search/recent"
-                ti.pax_headers[
-                    "cjw:apiParams"
-                ] = "expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&query=science&since_id=15&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname"
-                ti.pax_headers["cjw:httpStatus"] = "429"
-                tar.addfile(ti, io.BytesIO(b"unused contents"))
-
-                # add the Parquet file
-                ti = tarfile.TarInfo("LEGACY.parquet")
-                ti.size = len(parquet_bytes)
-                tar.addfile(ti, io.BytesIO(parquet_bytes))
-            result = twitter.fetch_arrow(
-                P(querytype="search", query="science", accumulate=True),
-                secrets={"twitter_credentials": DefaultSecret},
-                last_fetch_result=twitter.FetchResult(Path(tarfile_tf.name)),
-                input_table_parquet_path=None,
-                output_path=Path(tf.name),
-            )
-        assert result.errors == []
-        result_file = twitter.FetchResultFile(result.path)
-        assert list(part.name for part in result_file.get_result_parts()) == [
-            "1332344823462965250.json.lz4",
-            "LEGACY.parquet",
-        ]
-
-
-@override_settings(TWITTER_MAX_ROWS_PER_TABLE=14)
-def test_search_accumulate_truncate_and_delete_legacy_v0(httpx_mock: HTTPXMock):
-    # each mock response has 10 results
-    httpx_mock.add_response(
-        url="https://api.twitter.com/2/tweets/search/recent?expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&query=science&since_id=15&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname",
-        data=Path("tests/files/2_tweets_search_recent_page_1.json").read_bytes(),
-        headers={"date": "Fri, 27 Nov 2020 15:25:50 GMT"},
-        status_code=200,
-    )
-    httpx_mock.add_response(
-        url="https://api.twitter.com/2/tweets/search/recent?expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&next_token=b26v89c19zqg8o3fosesr6z0c2eac8nalgxjenpv5qjy5&query=science&since_id=15&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname",
-        # We nixed the "next_token" from 2_tweets_search_recent_page_2.json.
-        data=Path("tests/files/2_tweets_search_recent_page_2.json").read_bytes(),
-        headers={"date": "Fri, 27 Nov 2020 15:29:05 GMT"},
-        status_code=200,
-    )
-
-    with tempfile.NamedTemporaryFile() as tf:
-        with _temp_parquet_file(
-            pa.table(
-                {
-                    "id": pa.array(
-                        [15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
-                        pa.int64(),
-                    )
-                }
-            )
-        ) as parquet_path:
-            result = twitter.fetch_arrow(
-                P(querytype="search", query="science", accumulate=True),
-                secrets={"twitter_credentials": DefaultSecret},
-                last_fetch_result=twitter.FetchResult(parquet_path),
-                input_table_parquet_path=None,
-                output_path=Path(tf.name),
-            )
-        assert result.errors == []
-        result_file = twitter.FetchResultFile(result.path)
-        assert list(part.name for part in result_file.get_result_parts()) == [
-            "1332344846833639425.json.lz4",
-            "1332344823462965250.json.lz4",
-        ]
-
-
-@override_settings(TWITTER_MAX_ROWS_PER_TABLE=14)
-def test_search_accumulate_truncate_and_delete_legacy_v0_in_tarfile(
-    httpx_mock: HTTPXMock,
-):
-    # The mock response has 10 results
-    httpx_mock.add_response(
-        url="https://api.twitter.com/2/tweets/search/recent?expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&query=science&since_id=25&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname",
-        data=Path("tests/files/2_tweets_search_recent_page_2.json").read_bytes(),
-        headers={"date": "Fri, 27 Nov 2020 15:25:50 GMT"},
-        status_code=200,
-    )
-
-    with tempfile.NamedTemporaryFile() as tf:
-        with _temp_parquet_file(
-            pa.table(
-                {
-                    "id": pa.array(
-                        [15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
-                        pa.int64(),
-                    )
-                }
-            ),
-        ) as parquet_path:
-            parquet_bytes = parquet_path.read_bytes()
-        with tempfile.NamedTemporaryFile() as tarfile_tf:
-            with tarfile.open(tarfile_tf.name, "w") as tar:
-                # add a JSON file. Contents don't matter.
-                ti = tarfile.TarInfo("25.json.lz4")
-                ti.size = len(b"unused contents")
-                ti.pax_headers["cjw:apiEndpoint"] = "2/tweets/search/recent"
-                ti.pax_headers[
-                    "cjw:apiParams"
-                ] = "expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&query=science&since_id=15&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname"
-                ti.pax_headers["cjw:httpStatus"] = "200"
-                ti.pax_headers["cjw:nTweets"] = "10"
-                tar.addfile(ti, io.BytesIO(b"unused contents"))
-
-                # add the Parquet file
-                ti = tarfile.TarInfo("LEGACY.parquet")
-                ti.size = len(parquet_bytes)
-                tar.addfile(ti, io.BytesIO(parquet_bytes))
-
-            result = twitter.fetch_arrow(
-                P(querytype="search", query="science", accumulate=True),
-                secrets={"twitter_credentials": DefaultSecret},
-                last_fetch_result=twitter.FetchResult(Path(tarfile_tf.name)),
-                input_table_parquet_path=None,
-                output_path=Path(tf.name),
-            )
-        assert result.errors == []
-        result_file = twitter.FetchResultFile(result.path)
-        assert list(part.name for part in result_file.get_result_parts()) == [
-            "1332344823462965250.json.lz4",
-            "25.json.lz4",
-        ]
-
-
-@override_settings(TWITTER_MAX_ROWS_PER_TABLE=24)
-def test_search_accumulate_keep_legacy_v0_in_tarfile(
-    httpx_mock: HTTPXMock,
-):
-    # The mock response has 10 results
-    httpx_mock.add_response(
-        url="https://api.twitter.com/2/tweets/search/recent?expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&query=science&since_id=25&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname",
-        data=Path("tests/files/2_tweets_search_recent_page_2.json").read_bytes(),
-        headers={"date": "Fri, 27 Nov 2020 15:25:50 GMT"},
-        status_code=200,
-    )
-
-    with tempfile.NamedTemporaryFile() as tf:
-        with _temp_parquet_file(
-            pa.table(
-                {
-                    "id": pa.array(
-                        [15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
-                        pa.int64(),
-                    )
-                }
-            ),
-        ) as parquet_path:
-            parquet_bytes = parquet_path.read_bytes()
-        with tempfile.NamedTemporaryFile() as tarfile_tf:
-            with tarfile.open(tarfile_tf.name, "w") as tar:
-                # add a JSON file. Contents don't matter.
-                ti = tarfile.TarInfo("25.json.lz4")
-                ti.size = len(b"unused contents")
-                ti.pax_headers["cjw:apiEndpoint"] = "2/tweets/search/recent"
-                ti.pax_headers[
-                    "cjw:apiParams"
-                ] = "expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&query=science&since_id=15&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname"
-                ti.pax_headers["cjw:httpStatus"] = "200"
-                ti.pax_headers["cjw:nTweets"] = "10"
-                tar.addfile(ti, io.BytesIO(b"unused contents"))
-
-                # add the Parquet file
-                ti = tarfile.TarInfo("LEGACY.parquet")
-                ti.size = len(parquet_bytes)
-                tar.addfile(ti, io.BytesIO(parquet_bytes))
-
-            result = twitter.fetch_arrow(
-                P(querytype="search", query="science", accumulate=True),
-                secrets={"twitter_credentials": DefaultSecret},
-                last_fetch_result=twitter.FetchResult(Path(tarfile_tf.name)),
-                input_table_parquet_path=None,
-                output_path=Path(tf.name),
-            )
-        assert result.errors == []
-        result_file = twitter.FetchResultFile(result.path)
-        assert list(part.name for part in result_file.get_result_parts()) == [
-            "1332344823462965250.json.lz4",
-            "25.json.lz4",
-            "LEGACY.parquet",
-        ]
-
-
-def test_search_accumulate_delete_results_when_params_are_different(httpx_mock):
-    httpx_mock.add_response(
-        url="https://api.twitter.com/2/tweets/search/recent?expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&query=notscience&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname",
-        data=Path("tests/files/2_tweets_search_recent_page_2.json").read_bytes(),
-        headers={"date": "Fri, 27 Nov 2020 15:25:50 GMT"},
-        status_code=200,
-    )
-
-    with tempfile.NamedTemporaryFile() as tf:
-        with tempfile.NamedTemporaryFile() as tarfile_tf:
-            with tarfile.open(tarfile_tf.name, "w") as tar:
-                ti = tarfile.TarInfo("12345.json.lz4")
-                ti.size = len(b"unused contents")
-                ti.pax_headers["cjw:apiEndpoint"] = "2/tweets/search/recent"
-                ti.pax_headers[
-                    "cjw:apiParams"
-                ] = "expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&query=science&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname"
-                ti.pax_headers["cjw:httpStatus"] = "200"
-                tar.addfile(ti, io.BytesIO(b"unused contents"))
-
-            result = twitter.fetch_arrow(
-                P(querytype="search", query="notscience", accumulate=True),
-                secrets={"twitter_credentials": DefaultSecret},
-                last_fetch_result=twitter.FetchResult(Path(tarfile_tf.name)),
-                input_table_parquet_path=None,
-                output_path=Path(tf.name),
-            )
-        assert result.errors == []
-        result_file = twitter.FetchResultFile(result.path)
-        assert list(part.name for part in result_file.get_result_parts()) == [
-            "1332344823462965250.json.lz4",
-        ]
+# def test_search(httpx_mock: HTTPXMock):
+#     httpx_mock.add_response(
+#         url="https://api.twitter.com/2/tweets/search/recent?expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&query=science&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname",
+#         data=Path("tests/files/2_tweets_search_recent_page_1.json").read_bytes(),
+#         headers={"date": "Fri, 27 Nov 2020 15:25:50 GMT"},
+#         status_code=200,
+#     )
+#     httpx_mock.add_response(
+#         url="https://api.twitter.com/2/tweets/search/recent?expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&next_token=b26v89c19zqg8o3fosesr6z0c2eac8nalgxjenpv5qjy5&query=science&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname",
+#         # We nixed the "next_token" from 2_tweets_search_recent_page_2.json.
+#         data=Path("tests/files/2_tweets_search_recent_page_2.json").read_bytes(),
+#         headers={"date": "Fri, 27 Nov 2020 15:29:05 GMT"},
+#         status_code=200,
+#     )
+#
+#     with tempfile.NamedTemporaryFile() as tf:
+#         result = twitter.fetch_arrow(
+#             P(querytype="search", query="science", accumulate=False),
+#             secrets={"twitter_credentials": DefaultSecret},
+#             last_fetch_result=None,
+#             input_table_parquet_path=None,
+#             output_path=Path(tf.name),
+#         )
+#         assert result.errors == []
+#         result_file = twitter.FetchResultFile(result.path)
+#         parts = result_file.get_result_parts()
+#
+#         page1 = next(parts)
+#         assert page1.name == "1332344846833639425.json.lz4"
+#         assert page1.api_endpoint == "2/tweets/search/recent"
+#         assert page1.n_tweets == 10
+#         assert (
+#             page1.api_params
+#             == "expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&query=science&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname"
+#         )
+#
+#         page2 = next(parts)
+#         assert page2.name == "1332344823462965250.json.lz4"
+#         assert page2.n_tweets == 10
+#
+#         with pytest.raises(StopIteration):
+#             next(parts)
+#
+#
+# def test_search_empty_results(httpx_mock: HTTPXMock):
+#     httpx_mock.add_response(
+#         url="https://api.twitter.com/2/tweets/search/recent?expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&query=nobodywrotethistextever&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname",
+#         data=b'{"meta":{"result_count":0}}',
+#         headers={"date": "Thu, 26 Nov 2020 15:21:40 GMT"},
+#         status_code=200,
+#     )
+#
+#     with tempfile.NamedTemporaryFile() as tf:
+#         result = twitter.fetch_arrow(
+#             P(querytype="search", query="nobodywrotethistextever", accumulate=False),
+#             secrets={"twitter_credentials": DefaultSecret},
+#             last_fetch_result=None,
+#             input_table_parquet_path=None,
+#             output_path=Path(tf.name),
+#         )
+#         assert result.errors == []
+#         result_file = twitter.FetchResultFile(result.path)
+#         assert not list(result_file.get_result_parts())
+#
+#
+# def test_search_accumulate_empty_results(httpx_mock: HTTPXMock):
+#     httpx_mock.add_response(
+#         url="https://api.twitter.com/2/tweets/search/recent?expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&query=nobodywrotethistextever&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname",
+#         data=b'{"meta":{"result_count":0}}',
+#         headers={"date": "Thu, 26 Nov 2020 15:21:40 GMT"},
+#         status_code=200,
+#     )
+#
+#     with tempfile.NamedTemporaryFile() as tf:
+#         with tempfile.NamedTemporaryFile() as tarfile_tf:
+#             with tarfile.open(tarfile_tf.name, "w"):
+#                 pass  # just write an empty tarfile
+#             result = twitter.fetch_arrow(
+#                 P(querytype="search", query="nobodywrotethistextever", accumulate=True),
+#                 secrets={"twitter_credentials": DefaultSecret},
+#                 last_fetch_result=twitter.FetchResult(Path(tarfile_tf.name)),
+#                 input_table_parquet_path=None,
+#                 output_path=Path(tf.name),
+#             )
+#         assert result.errors == []
+#         result_file = twitter.FetchResultFile(result.path)
+#         assert not list(result_file.get_result_parts())
+#
+#
+# def test_search_accumulate_recover_after_bug_160258591(httpx_mock: HTTPXMock):
+#     # https://www.pivotaltracker.com/story/show/160258591
+#     # 'id', 'retweet_count' and 'favorite_count' had type=text after
+#     # accumulating an empty table. In file format v0, that postprocessing
+#     # happened during fetch -- so the _stored_ data has the wrong type. We
+#     # need to support this forever.
+#     httpx_mock.add_response(
+#         url="https://api.twitter.com/2/tweets/search/recent?expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&query=science&since_id=656444340701634560&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname",
+#         data=Path("tests/files/2_tweets_search_recent_page_2.json").read_bytes(),
+#         headers={"date": "Fri, 27 Nov 2020 15:25:50 GMT"},
+#         status_code=200,
+#     )
+#
+#     with tempfile.NamedTemporaryFile() as tf:
+#         with _temp_parquet_file(
+#             pa.table({"id": ["656444340701634560"]})
+#         ) as parquet_path:
+#             parquet_bytes = parquet_path.read_bytes()
+#             result = twitter.fetch_arrow(
+#                 P(querytype="search", query="science", accumulate=True),
+#                 secrets={"twitter_credentials": DefaultSecret},
+#                 last_fetch_result=twitter.FetchResult(parquet_path),
+#                 input_table_parquet_path=None,
+#                 output_path=Path(tf.name),
+#             )
+#         assert result.errors == []
+#         result_file = twitter.FetchResultFile(result.path)
+#         assert list(result_file.get_result_parts())[1].body == parquet_bytes
+#
+#
+# def test_search_accumulate_delete_empty_parquet(httpx_mock: HTTPXMock):
+#     httpx_mock.add_response(
+#         url="https://api.twitter.com/2/tweets/search/recent?expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&query=science&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname",
+#         data=Path("tests/files/2_tweets_search_recent_page_2.json").read_bytes(),
+#         headers={"date": "Fri, 27 Nov 2020 15:25:50 GMT"},
+#         status_code=200,
+#     )
+#
+#     with tempfile.NamedTemporaryFile() as tf:
+#         with _temp_parquet_file(twitter.ARROW_SCHEMA.empty_table()) as parquet_path:
+#             result = twitter.fetch_arrow(
+#                 P(querytype="search", query="science", accumulate=True),
+#                 secrets={"twitter_credentials": DefaultSecret},
+#                 last_fetch_result=twitter.FetchResult(parquet_path),
+#                 input_table_parquet_path=None,
+#                 output_path=Path(tf.name),
+#             )
+#         assert result.errors == []
+#         result_file = twitter.FetchResultFile(result.path)
+#         assert list(part.name for part in result_file.get_result_parts()) == [
+#             "1332344823462965250.json.lz4"
+#         ]
+#
+#
+# def test_search_accumulate_read_max_tweet_id_from_legacy_parquet(httpx_mock: HTTPXMock):
+#     httpx_mock.add_response(
+#         url="https://api.twitter.com/2/tweets/search/recent?expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&query=science&since_id=15&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname",
+#         data=Path("tests/files/2_tweets_search_recent_page_2.json").read_bytes(),
+#         headers={"date": "Fri, 27 Nov 2020 15:25:50 GMT"},
+#         status_code=200,
+#     )
+#
+#     with tempfile.NamedTemporaryFile() as tf:
+#         with _temp_parquet_file(
+#             pa.table({"id": pa.array([15, 14, 13], pa.int64())})
+#         ) as parquet_path:
+#             parquet_bytes = parquet_path.read_bytes()
+#         with tempfile.NamedTemporaryFile() as tarfile_tf:
+#             with tarfile.open(tarfile_tf.name, "w") as tar:
+#                 ti = tarfile.TarInfo("API-ERROR.lz4")
+#                 ti.size = len(b"unused contents")
+#                 ti.pax_headers["cjw:apiEndpoint"] = "2/tweets/search/recent"
+#                 ti.pax_headers[
+#                     "cjw:apiParams"
+#                 ] = "expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&query=science&since_id=15&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname"
+#                 ti.pax_headers["cjw:httpStatus"] = "429"
+#                 tar.addfile(ti, io.BytesIO(b"unused contents"))
+#
+#                 # add the Parquet file
+#                 ti = tarfile.TarInfo("LEGACY.parquet")
+#                 ti.size = len(parquet_bytes)
+#                 tar.addfile(ti, io.BytesIO(parquet_bytes))
+#             result = twitter.fetch_arrow(
+#                 P(querytype="search", query="science", accumulate=True),
+#                 secrets={"twitter_credentials": DefaultSecret},
+#                 last_fetch_result=twitter.FetchResult(Path(tarfile_tf.name)),
+#                 input_table_parquet_path=None,
+#                 output_path=Path(tf.name),
+#             )
+#         assert result.errors == []
+#         result_file = twitter.FetchResultFile(result.path)
+#         assert list(part.name for part in result_file.get_result_parts()) == [
+#             "1332344823462965250.json.lz4",
+#             "LEGACY.parquet",
+#         ]
+#
+#
+# @override_settings(TWITTER_MAX_ROWS_PER_TABLE=14)
+# def test_search_accumulate_truncate_and_delete_legacy_v0(httpx_mock: HTTPXMock):
+#     # each mock response has 10 results
+#     httpx_mock.add_response(
+#         url="https://api.twitter.com/2/tweets/search/recent?expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&query=science&since_id=15&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname",
+#         data=Path("tests/files/2_tweets_search_recent_page_1.json").read_bytes(),
+#         headers={"date": "Fri, 27 Nov 2020 15:25:50 GMT"},
+#         status_code=200,
+#     )
+#     httpx_mock.add_response(
+#         url="https://api.twitter.com/2/tweets/search/recent?expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&next_token=b26v89c19zqg8o3fosesr6z0c2eac8nalgxjenpv5qjy5&query=science&since_id=15&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname",
+#         # We nixed the "next_token" from 2_tweets_search_recent_page_2.json.
+#         data=Path("tests/files/2_tweets_search_recent_page_2.json").read_bytes(),
+#         headers={"date": "Fri, 27 Nov 2020 15:29:05 GMT"},
+#         status_code=200,
+#     )
+#
+#     with tempfile.NamedTemporaryFile() as tf:
+#         with _temp_parquet_file(
+#             pa.table(
+#                 {
+#                     "id": pa.array(
+#                         [15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
+#                         pa.int64(),
+#                     )
+#                 }
+#             )
+#         ) as parquet_path:
+#             result = twitter.fetch_arrow(
+#                 P(querytype="search", query="science", accumulate=True),
+#                 secrets={"twitter_credentials": DefaultSecret},
+#                 last_fetch_result=twitter.FetchResult(parquet_path),
+#                 input_table_parquet_path=None,
+#                 output_path=Path(tf.name),
+#             )
+#         assert result.errors == []
+#         result_file = twitter.FetchResultFile(result.path)
+#         assert list(part.name for part in result_file.get_result_parts()) == [
+#             "1332344846833639425.json.lz4",
+#             "1332344823462965250.json.lz4",
+#         ]
+#
+#
+# @override_settings(TWITTER_MAX_ROWS_PER_TABLE=14)
+# def test_search_accumulate_truncate_and_delete_legacy_v0_in_tarfile(
+#     httpx_mock: HTTPXMock,
+# ):
+#     # The mock response has 10 results
+#     httpx_mock.add_response(
+#         url="https://api.twitter.com/2/tweets/search/recent?expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&query=science&since_id=25&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname",
+#         data=Path("tests/files/2_tweets_search_recent_page_2.json").read_bytes(),
+#         headers={"date": "Fri, 27 Nov 2020 15:25:50 GMT"},
+#         status_code=200,
+#     )
+#
+#     with tempfile.NamedTemporaryFile() as tf:
+#         with _temp_parquet_file(
+#             pa.table(
+#                 {
+#                     "id": pa.array(
+#                         [15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
+#                         pa.int64(),
+#                     )
+#                 }
+#             ),
+#         ) as parquet_path:
+#             parquet_bytes = parquet_path.read_bytes()
+#         with tempfile.NamedTemporaryFile() as tarfile_tf:
+#             with tarfile.open(tarfile_tf.name, "w") as tar:
+#                 # add a JSON file. Contents don't matter.
+#                 ti = tarfile.TarInfo("25.json.lz4")
+#                 ti.size = len(b"unused contents")
+#                 ti.pax_headers["cjw:apiEndpoint"] = "2/tweets/search/recent"
+#                 ti.pax_headers[
+#                     "cjw:apiParams"
+#                 ] = "expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&query=science&since_id=15&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname"
+#                 ti.pax_headers["cjw:httpStatus"] = "200"
+#                 ti.pax_headers["cjw:nTweets"] = "10"
+#                 tar.addfile(ti, io.BytesIO(b"unused contents"))
+#
+#                 # add the Parquet file
+#                 ti = tarfile.TarInfo("LEGACY.parquet")
+#                 ti.size = len(parquet_bytes)
+#                 tar.addfile(ti, io.BytesIO(parquet_bytes))
+#
+#             result = twitter.fetch_arrow(
+#                 P(querytype="search", query="science", accumulate=True),
+#                 secrets={"twitter_credentials": DefaultSecret},
+#                 last_fetch_result=twitter.FetchResult(Path(tarfile_tf.name)),
+#                 input_table_parquet_path=None,
+#                 output_path=Path(tf.name),
+#             )
+#         assert result.errors == []
+#         result_file = twitter.FetchResultFile(result.path)
+#         assert list(part.name for part in result_file.get_result_parts()) == [
+#             "1332344823462965250.json.lz4",
+#             "25.json.lz4",
+#         ]
+#
+#
+# @override_settings(TWITTER_MAX_ROWS_PER_TABLE=24)
+# def test_search_accumulate_keep_legacy_v0_in_tarfile(
+#     httpx_mock: HTTPXMock,
+# ):
+#     # The mock response has 10 results
+#     httpx_mock.add_response(
+#         url="https://api.twitter.com/2/tweets/search/recent?expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&query=science&since_id=25&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname",
+#         data=Path("tests/files/2_tweets_search_recent_page_2.json").read_bytes(),
+#         headers={"date": "Fri, 27 Nov 2020 15:25:50 GMT"},
+#         status_code=200,
+#     )
+#
+#     with tempfile.NamedTemporaryFile() as tf:
+#         with _temp_parquet_file(
+#             pa.table(
+#                 {
+#                     "id": pa.array(
+#                         [15, 14, 13, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1],
+#                         pa.int64(),
+#                     )
+#                 }
+#             ),
+#         ) as parquet_path:
+#             parquet_bytes = parquet_path.read_bytes()
+#         with tempfile.NamedTemporaryFile() as tarfile_tf:
+#             with tarfile.open(tarfile_tf.name, "w") as tar:
+#                 # add a JSON file. Contents don't matter.
+#                 ti = tarfile.TarInfo("25.json.lz4")
+#                 ti.size = len(b"unused contents")
+#                 ti.pax_headers["cjw:apiEndpoint"] = "2/tweets/search/recent"
+#                 ti.pax_headers[
+#                     "cjw:apiParams"
+#                 ] = "expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&query=science&since_id=15&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname"
+#                 ti.pax_headers["cjw:httpStatus"] = "200"
+#                 ti.pax_headers["cjw:nTweets"] = "10"
+#                 tar.addfile(ti, io.BytesIO(b"unused contents"))
+#
+#                 # add the Parquet file
+#                 ti = tarfile.TarInfo("LEGACY.parquet")
+#                 ti.size = len(parquet_bytes)
+#                 tar.addfile(ti, io.BytesIO(parquet_bytes))
+#
+#             result = twitter.fetch_arrow(
+#                 P(querytype="search", query="science", accumulate=True),
+#                 secrets={"twitter_credentials": DefaultSecret},
+#                 last_fetch_result=twitter.FetchResult(Path(tarfile_tf.name)),
+#                 input_table_parquet_path=None,
+#                 output_path=Path(tf.name),
+#             )
+#         assert result.errors == []
+#         result_file = twitter.FetchResultFile(result.path)
+#         assert list(part.name for part in result_file.get_result_parts()) == [
+#             "1332344823462965250.json.lz4",
+#             "25.json.lz4",
+#             "LEGACY.parquet",
+#         ]
+#
+#
+# def test_search_accumulate_delete_results_when_params_are_different(httpx_mock):
+#     httpx_mock.add_response(
+#         url="https://api.twitter.com/2/tweets/search/recent?expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&query=notscience&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname",
+#         data=Path("tests/files/2_tweets_search_recent_page_2.json").read_bytes(),
+#         headers={"date": "Fri, 27 Nov 2020 15:25:50 GMT"},
+#         status_code=200,
+#     )
+#
+#     with tempfile.NamedTemporaryFile() as tf:
+#         with tempfile.NamedTemporaryFile() as tarfile_tf:
+#             with tarfile.open(tarfile_tf.name, "w") as tar:
+#                 ti = tarfile.TarInfo("12345.json.lz4")
+#                 ti.size = len(b"unused contents")
+#                 ti.pax_headers["cjw:apiEndpoint"] = "2/tweets/search/recent"
+#                 ti.pax_headers[
+#                     "cjw:apiParams"
+#                 ] = "expansions=author_id%2Cin_reply_to_user_id%2Creferenced_tweets.id.author_id&max_results=100&query=science&tweet.fields=id%2Ctext%2Cauthor_id%2Ccreated_at%2Cin_reply_to_user_id%2Cpublic_metrics%2Csource%2Clang%2Creferenced_tweets&user.fields=id%2Cdescription%2Cusername%2Cname"
+#                 ti.pax_headers["cjw:httpStatus"] = "200"
+#                 tar.addfile(ti, io.BytesIO(b"unused contents"))
+#
+#             result = twitter.fetch_arrow(
+#                 P(querytype="search", query="notscience", accumulate=True),
+#                 secrets={"twitter_credentials": DefaultSecret},
+#                 last_fetch_result=twitter.FetchResult(Path(tarfile_tf.name)),
+#                 input_table_parquet_path=None,
+#                 output_path=Path(tf.name),
+#             )
+#         assert result.errors == []
+#         result_file = twitter.FetchResultFile(result.path)
+#         assert list(part.name for part in result_file.get_result_parts()) == [
+#             "1332344823462965250.json.lz4",
+#         ]

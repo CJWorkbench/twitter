@@ -18,12 +18,12 @@ lz4 = "*"
 oauthlib = "~=3.1"
 pyarrow = "~=2.0"
 python = "~=3.8"
-python-dateutil = "~= 2.8"
 
 [tool.poetry.dev-dependencies]
 pytest = "~=6.0"
 pytest_httpx = "~= 0.10"
 pytest-cov = "~=2.10"
+python-dateutil = "~=2.8"
 
 [tool.isort]
 # Black compatibility
@@ -61,6 +61,7 @@ deps =
   pytest~=6.0
   pytest_httpx~=0.10
   pytest-cov~=2.10
+  python-dateutil~=2.8
 commands =
   pip install -q .
   pytest -s -v --cov=twitter --cov-report=term-missing

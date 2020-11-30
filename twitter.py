@@ -17,7 +17,7 @@ A tarfile with zero or more of the following files (in order):
     * mtime is HTTP `date` header from Twitter HTTP response
     * (pax) cjw:apiEndpoint: "1.1/statuses/user_timeline.json" or
                              "1.1/lists/statuses.json" or
-                             "2/tweets/search/recent"
+                             "1.1/search/tweets.json"
     * (pax) cjw:apiParams: params, application/x-www-form-urlencoded
     * (pax) cjw:httpStatus: HTTP status code from Twitter
     * (pax) cjw:nTweets: Number of tweets (never 0)
@@ -128,7 +128,6 @@ from typing import (
     Union,
 )
 
-import dateutil.parser
 import httpx
 import lz4.frame
 import pyarrow as pa
@@ -204,30 +203,9 @@ def _parse_v1_tweet_text(tweet_json: Dict[str, Any]) -> str:
         return tweet_json["full_text"]
 
 
-def _parse_v2_tweet_text(
-    tweet_json: Dict[str, Any],
-    *,
-    expanded_tweets: Dict[str, Any] = {},
-    expanded_users: dict[str, Any] = {},
-) -> str:
-    if (
-        "referenced_tweets" in tweet_json
-        and tweet_json["referenced_tweets"]
-        and tweet_json["referenced_tweets"][0]["type"] == "retweeted"
-    ):
-        retweeted_tweet = expanded_tweets.get(tweet_json["referenced_tweets"][0]["id"])
-        if retweeted_tweet:
-            user = expanded_users.get(retweeted_tweet["author_id"])
-            if user:
-                return "RT @%s: %s" % (user["username"], retweeted_tweet["text"])
-    # Fallback
-    return tweet_json["text"]
-
-
 class Column(NamedTuple):
     name: str
     v1_path: List[Union[str, int, Callable]]
-    v2_path: List[Union[str, int, Callable]]
     dtype: pa.DataType
     accumulable: bool
 
@@ -236,67 +214,49 @@ Columns = [
     Column(
         "screen_name",
         ["user", "screen_name"],
-        ["author_id", "[user]", "username"],
         pa.utf8(),
         True,
     ),
     Column(
         "created_at",
         ["created_at", parsedate_to_datetime],
-        ["created_at", dateutil.parser.isoparse],
         pa.timestamp("ns"),
         True,
     ),
-    # _parse_v2_tweet_text() is special-cased to allow extra params
-    Column("text", [_parse_v1_tweet_text], [_parse_v2_tweet_text], pa.utf8(), True),
+    Column("text", [_parse_v1_tweet_text], pa.utf8(), True),
     Column(
         "retweet_count",
         ["retweet_count"],
-        ["public_metrics", "retweet_count"],
         pa.int64(),
         False,
     ),
     Column(
         "favorite_count",
         ["favorite_count"],
-        ["public_metrics", "like_count"],
         pa.int64(),
         False,
     ),
     Column(
         "in_reply_to_screen_name",
         ["in_reply_to_screen_name"],
-        ["in_reply_to_user_id", "[user]", "username"],
         pa.utf8(),
         True,
     ),
     Column(
         "retweeted_status_screen_name",
         ["retweeted_status", "user", "screen_name"],
-        [
-            "referenced_tweets",
-            "[type=retweeted]",
-            "id",
-            "[tweet]",
-            "author_id",
-            "[user]",
-            "username",
-        ],
         pa.utf8(),
         True,
     ),
     Column(
         "user_description",
         ["user", "description"],
-        ["author_id", "[user]", "description"],
         pa.utf8(),
         True,
     ),
-    Column(
-        "source", ["source", _parse_source], ["source", _parse_source], pa.utf8(), True
-    ),
-    Column("lang", ["lang", _parse_lang], ["lang", _parse_lang], pa.utf8(), True),
-    Column("id", ["id"], ["id", int], pa.int64(), True),
+    Column("source", ["source", _parse_source], pa.utf8(), True),
+    Column("lang", ["lang", _parse_lang], pa.utf8(), True),
+    Column("id", ["id"], pa.int64(), True),
 ]
 
 
@@ -331,10 +291,6 @@ def _tweets_to_column_list(
     records = tweets
     for path_part in path:
         if callable(path_part):
-            if path_part == _parse_v2_tweet_text:
-                path_part = lambda x: _parse_v2_tweet_text(
-                    x, expanded_tweets=expanded_tweets, expanded_users=expanded_users
-                )
             records = [path_part(o) if o else None for o in records]
         elif path_part == "[type=retweeted]":
             records = [
@@ -360,27 +316,6 @@ def _twitter_v1_records_to_record_batch(
                 column.v1_path,
                 expanded_users={},
                 expanded_tweets={},
-            )
-            for column in Columns
-            if column.accumulable or not accumulated
-        ],
-        ACCUMULATED_SCHEMA if accumulated else ARROW_SCHEMA,
-    )
-
-
-def _twitter_v2_records_to_record_batch(
-    data: Dict[str, Any], accumulated: bool
-) -> pa.RecordBatch:
-    # `data` is an Object with keys `data` (Array), `meta`, `includes`.
-    expanded_users = {u["id"]: u for u in data["includes"]["users"]}
-    expanded_tweets = {t["id"]: t for t in data["includes"]["tweets"]}
-    return pa.record_batch(
-        [
-            _tweets_to_column_list(
-                data["data"],
-                column.v2_path,
-                expanded_users=expanded_users,
-                expanded_tweets=expanded_tweets,
             )
             for column in Columns
             if column.accumulable or not accumulated
@@ -464,10 +399,14 @@ def _render_api_error(
             {"httpStatus": http_status, "error": error["error"]},
         )
     else:
+        if "errors" in error:
+            message = error["errors"][0]["message"]
+        else:
+            message = data.decode("utf-8")
         return i18n.trans(
             "error.genericApiErrorV2",
             "Error from Twitter API: {title}: {message}",
-            {"title": error["title"], "message": error["errors"][0]["message"]},
+            {"title": error["title"], "message": message},
         )
 
 
@@ -498,15 +437,11 @@ def _render_file_format_v1(
             json_records = json.loads(
                 lz4.frame.decompress(result_part.body).decode("utf-8")
             )
-            if result_part.api_endpoint.startswith("2/"):
-                record_batch = _twitter_v2_records_to_record_batch(
-                    json_records, accumulated
-                )
-            else:
-                record_batch = _twitter_v1_records_to_record_batch(
-                    json_records, accumulated
-                )
-            record_batches.append(record_batch)
+            record_batch = _twitter_v1_records_to_record_batch(
+                json_records, accumulated
+            )
+            if len(record_batch):
+                record_batches.append(record_batch)
         elif result_part.name == "LEGACY.parquet":
             record_batches.extend(
                 _render_legacy_file_format_v0_record_batches(
@@ -549,7 +484,12 @@ def render(arrow_table, params, output_path, *, fetch_result, **kwargs):
 def _parse_query(
     querytype: Literal["user_timeline", "search", "lists_statuses"], query: str
 ) -> Tuple[
-    Literal["1.1/lists/statuses.json", "2/tweets/search/recent"], Dict[str, str]
+    Literal[
+        "1.1/statuses/user_timeline.json",
+        "1.1/lists/statuses.json",
+        "1.1/search/tweets.json",
+    ],
+    Dict[str, str],
 ]:
     """Parse params and return an endpoint + params.
 
@@ -574,7 +514,7 @@ def _parse_query(
             )
         return "1.1/lists/statuses.json", params
     elif querytype == "search":
-        return "2/tweets/search/recent", {"query": query}
+        return "1.1/search/tweets.json", {"q": query}
     elif querytype == "user_timeline":
         if m := OWNER_SCREEN_NAME_REGEX.match(query):
             return "1.1/statuses/user_timeline.json", {"screen_name": m.group(1)}
@@ -648,7 +588,7 @@ class ResultPart(NamedTuple):
         Literal[
             "1.1/lists/statuses.json",
             "1.1/statuses/user_timeline.json",
-            "2/tweets/search/recent",
+            "1.1/search/tweets.json",
         ]
     ] = None
     """Endpoint that led to this file's creation."""
@@ -798,7 +738,7 @@ async def _fetch_paginated(
     endpoint: Literal[
         "1.1/lists/statuses.json",
         "1.1/statuses/user_timeline.json",
-        "2/tweets/search/recent",
+        "1.1/search/tweets.json",
     ],
     params: Dict[str, Any],
     *,
@@ -823,9 +763,14 @@ async def _fetch_paginated(
         resource_owner_secret=credentials["resource_owner_secret"],
     )
     async with httpx.AsyncClient() as client:
-        if endpoint == "2/tweets/search/recent":
-            return await _fetch_paginated_2(
-                client, endpoint, params, oauth_client=oauth_client
+        if endpoint == "1.1/search/tweets.json":
+            return await _fetch_paginated_1_1(
+                client,
+                endpoint,
+                params,
+                oauth_client=oauth_client,
+                tweets_per_request=100,
+                max_n_requests=10,
             )
         elif endpoint == "1.1/statuses/user_timeline.json":
             return await _fetch_paginated_1_1(
@@ -833,6 +778,7 @@ async def _fetch_paginated(
                 endpoint,
                 params,
                 oauth_client=oauth_client,
+                tweets_per_request=200,
                 max_n_requests=16,  # 3,200 tweets: [2020-11-26] Twitter's maximum
             )
         elif endpoint == "1.1/lists/statuses.json":
@@ -841,6 +787,7 @@ async def _fetch_paginated(
                 endpoint,
                 params,
                 oauth_client=oauth_client,
+                tweets_per_request=200,
                 max_n_requests=5,  # arbitrary => 1,000 tweets
             )
         else:
@@ -942,6 +889,7 @@ async def _fetch_paginated_1_1(
     params: Dict[str, Any],
     *,
     oauth_client: oauth1.Client,
+    tweets_per_request: int,
     max_n_requests: int,
 ) -> List[ResultPart]:
     """Fetch from Twitter API v1.1.
@@ -956,8 +904,6 @@ async def _fetch_paginated_1_1(
 
     Otherwise, return tweets ordered from newest to oldest.
     """
-    MAX_RESULTS_PER_REQUEST = 200  # [2020-11-25] current Twitter API v1.1 limit
-
     retval: List[ResultPart] = []  # result, unless we hit an error
     max_id = None
     for _ in range(max_n_requests):
@@ -965,7 +911,7 @@ async def _fetch_paginated_1_1(
             **params,
             "tweet_mode": "extended",
             "include_entities": "false",
-            "count": str(MAX_RESULTS_PER_REQUEST),
+            "count": str(tweets_per_request),
         }
         if max_id is not None:
             page_params["max_id"] = str(max_id)
@@ -991,69 +937,6 @@ async def _fetch_paginated_1_1(
         # Now loop and request again ... using the new `max_id` to find only
         # older tweets
         max_id = min_id - 1
-
-    return retval
-
-
-async def _fetch_paginated_2(
-    client: httpx.Client,
-    endpoint: Literal["2/tweets/search/recent"],
-    params: Dict[str, Any],
-    *,
-    oauth_client: oauth1.Client,
-) -> List[ResultPart]:
-    """Fetch from Twitter API 2/tweets/search/recent.
-
-    Return empty list if there are no tweets.
-
-    Return a single "API-ERROR.lz4" result if Twitter responds negatively
-    to any request.
-
-    Return a single "NETWORK-ERROR.json.lz4" result if we fail to receive a
-    Twitter response to any request.
-
-    Otherwise, return tweets ordered from newest to oldest.
-    """
-    MAX_N_REQUESTS = 30
-    MAX_RESULTS_PER_REQUEST = 100  # [2020-11-25] current Twitter API v2 limit
-    COMMON_PARAMS = {
-        "expansions": "author_id,in_reply_to_user_id,referenced_tweets.id.author_id",
-        "tweet.fields": "id,text,author_id,created_at,in_reply_to_user_id,public_metrics,source,lang,referenced_tweets",
-        "user.fields": "id,description,username,name",
-        "max_results": str(MAX_RESULTS_PER_REQUEST),
-    }
-
-    def get_max_tweet_id(d: Dict[str, Any]):
-        # assume there are tweets -- otherwise, this wouldn't be called.
-        v = d["meta"]["newest_id"]
-        return int(v)  # Twitter API v2 makes IDs strings.
-
-    retval: List[ResultPart] = []  # result, unless we hit an error
-    next_token = None
-    for _ in range(MAX_N_REQUESTS):
-        page_params = {**COMMON_PARAMS, **params}
-        if next_token is not None:
-            page_params["next_token"] = next_token
-
-        result_part, next_token = await _call_twitter_api_once(
-            client,
-            endpoint,
-            page_params,
-            oauth_client=oauth_client,
-            # missing JSON fields? Undefined behavior
-            get_n_tweets=lambda d: d["meta"]["result_count"],
-            get_max_tweet_id=get_max_tweet_id,
-            get_next_token=lambda d: d["meta"].get("next_token"),
-        )
-
-        if not result_part:
-            break  # no tweets; don't add to the tarfile
-
-        retval.append(result_part)
-
-        if next_token is None:
-            break
-        # Now loop and request again ... using the new `next_token`
 
     return retval
 
