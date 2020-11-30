@@ -495,12 +495,13 @@ def _render_file_format_v1(
 
 
 # Render just returns previously retrieved tweets
-def render(arrow_table, params, output_path, *, fetch_result):
+def render(arrow_table, params, output_path, *, fetch_result, **kwargs):
+
     if fetch_result is None:
         return []
 
     if fetch_result.errors:
-        return fetch_result.errors
+        return list(error.message for error in fetch_result.errors)
 
     table, errors = _render_file_format_v1(fetch_result.path)
     if table is not None:
@@ -1026,9 +1027,9 @@ async def _fetch_paginated_2(
 
 def fetch_arrow(
     params: Dict[str, Any],
-    *,
     secrets: Dict[str, Any],
     last_fetch_result: FetchResult,
+    input_table_parquet_path: Optional[Path],
     output_path: Path,
     **kwargs,
 ) -> FetchResult:
