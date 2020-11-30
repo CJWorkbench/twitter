@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2020-11-30 18:53+0000\n"
+"POT-Creation-Date: 2020-11-30 19:18+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: en\n"
@@ -52,39 +52,39 @@ msgstr "Update"
 msgid "_spec.parameters.accumulate.name"
 msgstr "Accumulate tweets"
 
-#: twitter.py:439
+#: twitter.py:374
 msgid "error.tooManyRequests"
 msgstr "Twitter API rate limit exceeded. Please wait a few minutes and try again."
 
-#: twitter.py:447
+#: twitter.py:382
 msgid "error.userDoesNotExist"
 msgstr "User {username} does not exist"
 
-#: twitter.py:453
+#: twitter.py:388
 msgid "error.userTweetsArePrivate"
 msgstr "User {username}'s tweets are private"
 
-#: twitter.py:461
+#: twitter.py:396
 msgid "error.genericApiErrorV1_1"
 msgstr "Error from Twitter API: {httpStatus} {error}"
 
-#: twitter.py:471
+#: twitter.py:406
 msgid "error.genericApiErrorV2"
 msgstr "Error from Twitter API: {title}: {message}"
 
-#: twitter.py:577
+#: twitter.py:513
 msgid "error.invalidList"
 msgstr "Please enter a valid Twitter list URL"
 
-#: twitter.py:587
+#: twitter.py:523
 msgid "error.invalidUsername"
 msgstr "Please enter a valid Twitter username"
 
-#: twitter.py:1085
+#: twitter.py:964
 msgid "error.noQuery"
 msgstr "Please enter a query"
 
-#: twitter.py:1092
+#: twitter.py:971
 msgid "error.noCredentials"
 msgstr "Please sign in to Twitter"
 

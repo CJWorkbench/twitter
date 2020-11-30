@@ -399,9 +399,9 @@ def _render_api_error(
             {"httpStatus": http_status, "error": error["error"]},
         )
     else:
-        if "errors" in error:
+        try:
             message = error["errors"][0]["message"]
-        else:
+        except (KeyError, IndexError):
             message = data.decode("utf-8")
         return i18n.trans(
             "error.genericApiErrorV2",
