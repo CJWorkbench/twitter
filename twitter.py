@@ -410,7 +410,7 @@ def _render_legacy_file_format_v0_record_batches(
 
 
 def _render_api_error(
-    api_endpoint: str, api_params: str, http_status: str, data: Dict[str, Any]
+    api_endpoint: str, api_params: str, http_status: str, data: bytes
 ) -> i18n.I18nMessage:
     if http_status == "429":
         return i18n.trans(
@@ -433,17 +433,18 @@ def _render_api_error(
                 {"username": username},
             )
 
+    error = json.loads(data.decode("utf-8"))
     if api_endpoint.startswith("1.1/"):
         return i18n.trans(
             "error.genericApiErrorV1_1",
             "Error from Twitter API: {httpStatus} {error}",
-            {"httpStatus": http_status, "error": data["error"]},
+            {"httpStatus": http_status, "error": error["error"]},
         )
     else:
         return i18n.trans(
             "error.genericApiErrorV2",
             "Error from Twitter API: {title}: {message}",
-            {"title": data["title"], "message": data["errors"][0]["message"]},
+            {"title": error["title"], "message": error["errors"][0]["message"]},
         )
 
 
@@ -459,7 +460,7 @@ def _render_file_format_v1(
                     result_part.api_endpoint,
                     result_part.api_params,
                     result_part.http_status,
-                    json.loads(lz4.frame.decompress(result_part.body).decode("utf-8")),
+                    lz4.frame.decompress(result_part.body),
                 )
             ]
         elif result_part.name == "NETWORK-ERROR.json.lz4":

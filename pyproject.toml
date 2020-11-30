@@ -12,16 +12,18 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 cjwmodule = "~=3.1"
+cjwparquet = "~= 2.1"
 httpx = ">=0.16.1"
 lz4 = "*"
 oauthlib = "~=3.1"
-cjwparquet = "~= 2.1"
 pyarrow = "~=2.0"
 python = "~=3.8"
+python-dateutil = "~= 2.8"
 
 [tool.poetry.dev-dependencies]
 pytest = "~=6.0"
 pytest_httpx = "~= 0.10"
+pytest-cov = "~=2.10"
 
 [tool.isort]
 # Black compatibility
@@ -58,7 +60,6 @@ commands =
 deps =
   pytest~=6.0
   pytest_httpx~=0.10
-  pytest-asyncio~=0.14
   pytest-cov~=2.10
 commands =
   pip install -q .

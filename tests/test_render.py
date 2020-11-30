@@ -113,7 +113,9 @@ def test_render_empty_no_query():
 def test_render_fetch_generated_error():
     # fetch() generates errors when params are invalid
     _assert_render(
-        twitter.FetchResult(Path("unused"), [i18n_message("error.invalidUsername")]),
+        twitter.FetchResult(
+            Path("unused"), [twitter.RenderError(i18n_message("error.invalidUsername"))]
+        ),
         None,
         [i18n_message("error.invalidUsername")],
     )
@@ -469,12 +471,18 @@ def test_render_network_error():
 
 
 def test_render_http_429():
+    # Twitters' 429 error isn't JSON. Handle it.
     with _temp_tarfile(
         [
-            lambda: _temp_json_lz4(
-                "API-ERROR.json.lz4",
-                {"error": "doesn't really matter"},
-                {"cjw:apiEndpoint": "2/tweets/search/recent", "cjw:httpStatus": "429"},
+            lambda: contextlib.nullcontext(
+                (
+                    "API-ERROR.json.lz4",
+                    lz4.frame.compress(b"Rate limit exceeded"),
+                    {
+                        "cjw:apiEndpoint": "2/tweets/search/recent",
+                        "cjw:httpStatus": "429",
+                    },
+                )
             )
         ]
     ) as tar_path:

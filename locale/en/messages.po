@@ -8,7 +8,7 @@ msgid ""
 msgstr ""
 "Project-Id-Version: PROJECT VERSION\n"
 "Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
-"POT-Creation-Date: 2020-11-30 15:23+0000\n"
+"POT-Creation-Date: 2020-11-30 16:11+0000\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
 "Language: en\n"
@@ -64,27 +64,27 @@ msgstr "User {username} does not exist"
 msgid "error.userTweetsArePrivate"
 msgstr "User {username}'s tweets are private"
 
-#: twitter.py:437
+#: twitter.py:438
 msgid "error.genericApiErrorV1_1"
 msgstr "Error from Twitter API: {httpStatus} {error}"
 
-#: twitter.py:443
+#: twitter.py:444
 msgid "error.genericApiErrorV2"
 msgstr "Error from Twitter API: {title}: {message}"
 
-#: twitter.py:538
+#: twitter.py:539
 msgid "error.invalidList"
 msgstr "Please enter a valid Twitter list URL"
 
-#: twitter.py:548
+#: twitter.py:549
 msgid "error.invalidUsername"
 msgstr "Please enter a valid Twitter username"
 
-#: twitter.py:1048
+#: twitter.py:1049
 msgid "error.noQuery"
 msgstr "Please enter a query"
 
-#: twitter.py:1055
+#: twitter.py:1056
 msgid "error.noCredentials"
 msgstr "Please sign in to Twitter"
 

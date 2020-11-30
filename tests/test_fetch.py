@@ -5,7 +5,6 @@ import tempfile
 from pathlib import Path
 from typing import ContextManager
 
-import dateutil
 import lz4.frame
 import pyarrow as pa
 import pyarrow.parquet
@@ -62,10 +61,6 @@ def P(
     )
 
 
-def dt(s):
-    return dateutil.parser.parse(s, ignoretz=True)
-
-
 @contextlib.contextmanager
 def _temp_parquet_file(table: pa.Table) -> ContextManager[Path]:
     with tempfile.NamedTemporaryFile() as tf:
@@ -74,62 +69,67 @@ def _temp_parquet_file(table: pa.Table) -> ContextManager[Path]:
         yield path
 
 
-def test_fetch_empty_query_and_secret():
+def test_empty_query_and_secret():
     result = twitter.fetch_arrow(
         P(querytype="search", query=""),
         secrets={"twitter_credentials": None},
         last_fetch_result=None,
+        input_table_parquet_path=None,
         output_path=Path("unused"),
     )
     assert not result.path.exists()
     assert not result.errors
 
 
-def test_fetch_empty_query():
+def test_empty_query():
     result = twitter.fetch_arrow(
         P(querytype="search", query=""),
         secrets={"twitter_credentials": DefaultSecret},
         last_fetch_result=None,
+        input_table_parquet_path=None,
         output_path=Path("unused"),
     )
     assert not result.path.exists()
     assert result.errors == [twitter.RenderError(i18n_message("error.noQuery"))]
 
 
-def test_fetch_empty_secret():
+def test_empty_secret():
     result = twitter.fetch_arrow(
         P(querytype="search", query="hi"),
         secrets={"twitter_credentials": None},
         last_fetch_result=None,
+        input_table_parquet_path=None,
         output_path=Path("unused"),
     )
     assert not result.path.exists()
     assert result.errors == [twitter.RenderError(i18n_message("error.noCredentials"))]
 
 
-def test_fetch_invalid_username():
+def test_invalid_username():
     result = twitter.fetch_arrow(
         P(querytype="user_timeline", username="@@batman"),
         secrets={"twitter_credentials": DefaultSecret},
         last_fetch_result=None,
+        input_table_parquet_path=None,
         output_path=Path("unused"),
     )
     assert not result.path.exists()
     assert result.errors == [twitter.RenderError(i18n_message("error.invalidUsername"))]
 
 
-def test_fetch_invalid_list():
+def test_invalid_list():
     result = twitter.fetch_arrow(
         P(querytype="lists_statuses", listurl="https://twitter.com/a/lists/@b"),
         secrets={"twitter_credentials": DefaultSecret},
         last_fetch_result=None,
+        input_table_parquet_path=None,
         output_path=Path("unused"),
     )
     assert not result.path.exists()
     assert result.errors == [twitter.RenderError(i18n_message("error.invalidList"))]
 
 
-def test_fetch_user_timeline_accumulate_atop_v1(httpx_mock: HTTPXMock):
+def test_user_timeline_accumulate_atop_v1(httpx_mock: HTTPXMock):
     httpx_mock.add_response(
         url="https://api.twitter.com/1.1/statuses/user_timeline.json?count=200&include_entities=false&screen_name=adamhooper&since_id=656444340701634560&tweet_mode=extended",
         data=Path(
@@ -168,6 +168,7 @@ def test_fetch_user_timeline_accumulate_atop_v1(httpx_mock: HTTPXMock):
                 P(querytype="user_timeline", username="@adamhooper", accumulate=True),
                 secrets={"twitter_credentials": DefaultSecret},
                 last_fetch_result=twitter.FetchResult(Path(tarfile_tf.name)),
+                input_table_parquet_path=None,
                 output_path=Path(tf.name),
             )
         assert result.errors == []
@@ -204,7 +205,7 @@ def test_fetch_user_timeline_accumulate_atop_v1(httpx_mock: HTTPXMock):
             next(parts)
 
 
-def test_fetch_user_timeline_accumulate_one_error_aborts_all(httpx_mock: HTTPXMock):
+def test_user_timeline_accumulate_one_error_aborts_all(httpx_mock: HTTPXMock):
     # If Twitter gives 20 good responses and 1 error, ignore the good responses
     # and _only_ store the error. (Otherwise, there would be a gap in the
     # tarfile where we _should_ have fetched but we won't know we need to.)
@@ -240,6 +241,7 @@ def test_fetch_user_timeline_accumulate_one_error_aborts_all(httpx_mock: HTTPXMo
                 P(querytype="user_timeline", username="@adamhooper", accumulate=True),
                 secrets={"twitter_credentials": DefaultSecret},
                 last_fetch_result=twitter.FetchResult(Path(tarfile_tf.name)),
+                input_table_parquet_path=None,
                 output_path=Path(tf.name),
             )
         assert result.errors == []
@@ -267,7 +269,7 @@ def test_fetch_user_timeline_accumulate_one_error_aborts_all(httpx_mock: HTTPXMo
             next(parts)
 
 
-def test_fetch_user_timeline_accumulate_ignore_duplicate_error(httpx_mock: HTTPXMock):
+def test_user_timeline_accumulate_ignore_duplicate_error(httpx_mock: HTTPXMock):
     # If Twitter gives the same error twice, that's probably because the
     # user entered the wrong params (e.g., a 404). We want to return the
     # exact same file as the last fetch, so Workbench won't store a new
@@ -308,13 +310,14 @@ def test_fetch_user_timeline_accumulate_ignore_duplicate_error(httpx_mock: HTTPX
                 P(querytype="user_timeline", username="@adamhooper", accumulate=True),
                 secrets={"twitter_credentials": DefaultSecret},
                 last_fetch_result=twitter.FetchResult(Path(tarfile_tf.name)),
+                input_table_parquet_path=None,
                 output_path=Path(tf.name),
             )
         assert result.errors == []
         assert result.path.read_bytes() == tar_bytes
 
 
-def test_fetch_user_timeline_accumulate_replace_different_error(httpx_mock: HTTPXMock):
+def test_user_timeline_accumulate_replace_different_error(httpx_mock: HTTPXMock):
     # If Twitter gives the same error twice, that's probably because the
     # user entered the wrong params (e.g., a 404). We want to return the
     # exact same file as the last fetch, so Workbench won't store a new
@@ -354,6 +357,7 @@ def test_fetch_user_timeline_accumulate_replace_different_error(httpx_mock: HTTP
                 P(querytype="user_timeline", username="@adamhooper", accumulate=True),
                 secrets={"twitter_credentials": DefaultSecret},
                 last_fetch_result=twitter.FetchResult(Path(tarfile_tf.name)),
+                input_table_parquet_path=None,
                 output_path=Path(tf.name),
             )
         assert result.errors == []
@@ -378,7 +382,7 @@ def test_fetch_user_timeline_accumulate_replace_different_error(httpx_mock: HTTP
         assert oldpage.body == b"unused body"
 
 
-def test_fetch_user_timeline_accumulate_zero_tweets_atop_v0(httpx_mock: HTTPXMock):
+def test_user_timeline_accumulate_zero_tweets_atop_v0(httpx_mock: HTTPXMock):
     httpx_mock.add_response(
         url="https://api.twitter.com/1.1/statuses/user_timeline.json?count=200&include_entities=false&screen_name=adamhooper&since_id=656444340701634560&tweet_mode=extended",
         data=b"[]",
@@ -392,13 +396,14 @@ def test_fetch_user_timeline_accumulate_zero_tweets_atop_v0(httpx_mock: HTTPXMoc
                 P(querytype="user_timeline", username="@adamhooper", accumulate=True),
                 secrets={"twitter_credentials": DefaultSecret},
                 last_fetch_result=twitter.FetchResult(parquet_path),
+                input_table_parquet_path=None,
                 output_path=Path(tf.name),
             )
         assert result.errors == []
         assert result.path.read_bytes() == parquet_bytes
 
 
-def test_fetch_user_timeline_accumulate_error_atop_v0(httpx_mock: HTTPXMock):
+def test_user_timeline_accumulate_error_atop_v0(httpx_mock: HTTPXMock):
     httpx_mock.add_response(
         url="https://api.twitter.com/1.1/statuses/user_timeline.json?count=200&include_entities=false&screen_name=adamhooper&since_id=656444340701634560&tweet_mode=extended",
         data=b"XXratelimitXX",
@@ -412,6 +417,7 @@ def test_fetch_user_timeline_accumulate_error_atop_v0(httpx_mock: HTTPXMock):
                 P(querytype="user_timeline", username="@adamhooper", accumulate=True),
                 secrets={"twitter_credentials": DefaultSecret},
                 last_fetch_result=twitter.FetchResult(parquet_path),
+                input_table_parquet_path=None,
                 output_path=Path(tf.name),
             )
         assert result.errors == []
@@ -424,7 +430,7 @@ def test_fetch_user_timeline_accumulate_error_atop_v0(httpx_mock: HTTPXMock):
         ]
 
 
-def test_fetch_user_timeline_accumulate_atop_v0(httpx_mock: HTTPXMock):
+def test_user_timeline_accumulate_atop_v0(httpx_mock: HTTPXMock):
     httpx_mock.add_response(
         url="https://api.twitter.com/1.1/statuses/user_timeline.json?count=200&include_entities=false&screen_name=adamhooper&since_id=656444340701634560&tweet_mode=extended",
         data=Path(
@@ -452,6 +458,7 @@ def test_fetch_user_timeline_accumulate_atop_v0(httpx_mock: HTTPXMock):
                 P(querytype="user_timeline", username="@adamhooper", accumulate=True),
                 secrets={"twitter_credentials": DefaultSecret},
                 last_fetch_result=twitter.FetchResult(parquet_path),
+                input_table_parquet_path=None,
                 output_path=Path(tf.name),
             )
         assert result.errors == []
@@ -488,7 +495,7 @@ def test_fetch_user_timeline_accumulate_atop_v0(httpx_mock: HTTPXMock):
             next(parts)
 
 
-def test_fetch_user_timeline_no_accumulate(httpx_mock: HTTPXMock):
+def test_user_timeline_no_accumulate(httpx_mock: HTTPXMock):
     httpx_mock.add_response(
         url="https://api.twitter.com/1.1/statuses/user_timeline.json?count=200&include_entities=false&screen_name=adamhooper&tweet_mode=extended",
         data=Path(
@@ -516,6 +523,7 @@ def test_fetch_user_timeline_no_accumulate(httpx_mock: HTTPXMock):
                 P(querytype="user_timeline", username="@adamhooper", accumulate=False),
                 secrets={"twitter_credentials": DefaultSecret},
                 last_fetch_result=twitter.FetchResult(parquet_path),
+                input_table_parquet_path=None,
                 output_path=Path(tf.name),
             )
         assert result.errors == []
@@ -540,7 +548,7 @@ def test_fetch_user_timeline_no_accumulate(httpx_mock: HTTPXMock):
             next(parts)
 
 
-def test_fetch_user_timeline_no_tweets(httpx_mock: HTTPXMock):
+def test_user_timeline_no_tweets(httpx_mock: HTTPXMock):
     httpx_mock.add_response(
         url="https://api.twitter.com/1.1/statuses/user_timeline.json?count=200&include_entities=false&screen_name=adamhooper&tweet_mode=extended",
         data=b"[]",
@@ -552,6 +560,7 @@ def test_fetch_user_timeline_no_tweets(httpx_mock: HTTPXMock):
             P(querytype="user_timeline", username="@adamhooper", accumulate=False),
             secrets={"twitter_credentials": DefaultSecret},
             last_fetch_result=None,
+            input_table_parquet_path=None,
             output_path=Path(tf.name),
         )
         assert result.errors == []
@@ -565,7 +574,7 @@ def test_fetch_user_timeline_no_tweets(httpx_mock: HTTPXMock):
         assert list(parts) == []
 
 
-def test_fetch_user_timeline_404_user_does_not_exist(httpx_mock: HTTPXMock):
+def test_user_timeline_404_user_does_not_exist(httpx_mock: HTTPXMock):
     httpx_mock.add_response(
         url="https://api.twitter.com/1.1/statuses/user_timeline.json?count=200&include_entities=false&screen_name=wrongnamdsfe&tweet_mode=extended",
         data=b'{"errors":[{"code":34,"message":"Sorry, that page does not exist."}]}',
@@ -578,6 +587,7 @@ def test_fetch_user_timeline_404_user_does_not_exist(httpx_mock: HTTPXMock):
             P(querytype="user_timeline", username="wrongnamdsfe", accumulate=False),
             secrets={"twitter_credentials": DefaultSecret},
             last_fetch_result=None,
+            input_table_parquet_path=None,
             output_path=Path(tf.name),
         )
         assert result.errors == []
@@ -602,7 +612,7 @@ def test_fetch_user_timeline_404_user_does_not_exist(httpx_mock: HTTPXMock):
         assert part1.n_tweets is None
 
 
-def test_fetch_user_timeline_401_tweets_are_private(httpx_mock: HTTPXMock):
+def test_user_timeline_401_tweets_are_private(httpx_mock: HTTPXMock):
     httpx_mock.add_response(
         url="https://api.twitter.com/1.1/statuses/user_timeline.json?count=200&include_entities=false&screen_name=elizabeth1&tweet_mode=extended",
         data=rb'{"request":"\/1.1\/statuses\/user_timeline.json","error":"Not authorized."}',
@@ -615,6 +625,7 @@ def test_fetch_user_timeline_401_tweets_are_private(httpx_mock: HTTPXMock):
             P(querytype="user_timeline", username="elizabeth1", accumulate=False),
             secrets={"twitter_credentials": DefaultSecret},
             last_fetch_result=None,
+            input_table_parquet_path=None,
             output_path=Path(tf.name),
         )
         assert result.errors == []
@@ -628,7 +639,7 @@ def test_fetch_user_timeline_401_tweets_are_private(httpx_mock: HTTPXMock):
         assert part1.http_status == "401"
 
 
-def test_fetch_list_statuses_owner_screen_name_slug_url(httpx_mock: HTTPXMock):
+def test_list_statuses_owner_screen_name_slug_url(httpx_mock: HTTPXMock):
     httpx_mock.add_response(
         url="https://api.twitter.com/1.1/lists/statuses.json?count=200&include_entities=false&owner_screen_name=winnydejong&slug=NICAR2020&tweet_mode=extended",
         data=Path("tests/files/1_1_lists_statuses_NICAR2020_page_1.json").read_bytes(),
@@ -656,6 +667,7 @@ def test_fetch_list_statuses_owner_screen_name_slug_url(httpx_mock: HTTPXMock):
             ),
             secrets={"twitter_credentials": DefaultSecret},
             last_fetch_result=None,
+            input_table_parquet_path=None,
             output_path=Path(tf.name),
         )
         assert result.errors == []
@@ -667,13 +679,14 @@ def test_fetch_list_statuses_owner_screen_name_slug_url(httpx_mock: HTTPXMock):
         ]
 
 
-def test_fetch_list_statuses_owner_screen_name_slug(httpx_mock: HTTPXMock):
+def test_list_statuses_owner_screen_name_slug(httpx_mock: HTTPXMock):
     # Don't mock any URLs. Let it error out -- let's only test the API params.
     with tempfile.NamedTemporaryFile() as tf:
         twitter.fetch_arrow(
             P(querytype="lists_statuses", listurl="winnydejong/NICAR2020"),
             secrets={"twitter_credentials": DefaultSecret},
             last_fetch_result=None,
+            input_table_parquet_path=None,
             output_path=Path(tf.name),
         )
         result_file = twitter.FetchResultFile(Path(tf.name))
@@ -682,7 +695,7 @@ def test_fetch_list_statuses_owner_screen_name_slug(httpx_mock: HTTPXMock):
         ]
 
 
-def test_fetch_list_statuses_list_id_url(httpx_mock: HTTPXMock):
+def test_list_statuses_list_id_url(httpx_mock: HTTPXMock):
     # Don't mock any URLs. Let it error out -- let's only test the API params.
     with tempfile.NamedTemporaryFile() as tf:
         twitter.fetch_arrow(
@@ -692,6 +705,7 @@ def test_fetch_list_statuses_list_id_url(httpx_mock: HTTPXMock):
             ),
             secrets={"twitter_credentials": DefaultSecret},
             last_fetch_result=None,
+            input_table_parquet_path=None,
             output_path=Path(tf.name),
         )
         result_file = twitter.FetchResultFile(Path(tf.name))
@@ -700,7 +714,7 @@ def test_fetch_list_statuses_list_id_url(httpx_mock: HTTPXMock):
         ]
 
 
-def test_fetch_list_statuses_list_id(httpx_mock: HTTPXMock):
+def test_list_statuses_list_id(httpx_mock: HTTPXMock):
     # Don't mock any URLs. Let it error out -- let's only test the API params.
     with tempfile.NamedTemporaryFile() as tf:
         twitter.fetch_arrow(
@@ -710,6 +724,7 @@ def test_fetch_list_statuses_list_id(httpx_mock: HTTPXMock):
             ),
             secrets={"twitter_credentials": DefaultSecret},
             last_fetch_result=None,
+            input_table_parquet_path=None,
             output_path=Path(tf.name),
         )
         result_file = twitter.FetchResultFile(Path(tf.name))
@@ -738,6 +753,7 @@ def test_search(httpx_mock: HTTPXMock):
             P(querytype="search", query="science", accumulate=False),
             secrets={"twitter_credentials": DefaultSecret},
             last_fetch_result=None,
+            input_table_parquet_path=None,
             output_path=Path(tf.name),
         )
         assert result.errors == []
@@ -774,6 +790,7 @@ def test_search_empty_results(httpx_mock: HTTPXMock):
             P(querytype="search", query="nobodywrotethistextever", accumulate=False),
             secrets={"twitter_credentials": DefaultSecret},
             last_fetch_result=None,
+            input_table_parquet_path=None,
             output_path=Path(tf.name),
         )
         assert result.errors == []
@@ -797,6 +814,7 @@ def test_search_accumulate_empty_results(httpx_mock: HTTPXMock):
                 P(querytype="search", query="nobodywrotethistextever", accumulate=True),
                 secrets={"twitter_credentials": DefaultSecret},
                 last_fetch_result=twitter.FetchResult(Path(tarfile_tf.name)),
+                input_table_parquet_path=None,
                 output_path=Path(tf.name),
             )
         assert result.errors == []
@@ -826,6 +844,7 @@ def test_search_accumulate_recover_after_bug_160258591(httpx_mock: HTTPXMock):
                 P(querytype="search", query="science", accumulate=True),
                 secrets={"twitter_credentials": DefaultSecret},
                 last_fetch_result=twitter.FetchResult(parquet_path),
+                input_table_parquet_path=None,
                 output_path=Path(tf.name),
             )
         assert result.errors == []
@@ -847,6 +866,7 @@ def test_search_accumulate_delete_empty_parquet(httpx_mock: HTTPXMock):
                 P(querytype="search", query="science", accumulate=True),
                 secrets={"twitter_credentials": DefaultSecret},
                 last_fetch_result=twitter.FetchResult(parquet_path),
+                input_table_parquet_path=None,
                 output_path=Path(tf.name),
             )
         assert result.errors == []
@@ -888,6 +908,7 @@ def test_search_accumulate_read_max_tweet_id_from_legacy_parquet(httpx_mock: HTT
                 P(querytype="search", query="science", accumulate=True),
                 secrets={"twitter_credentials": DefaultSecret},
                 last_fetch_result=twitter.FetchResult(Path(tarfile_tf.name)),
+                input_table_parquet_path=None,
                 output_path=Path(tf.name),
             )
         assert result.errors == []
@@ -930,6 +951,7 @@ def test_search_accumulate_truncate_and_delete_legacy_v0(httpx_mock: HTTPXMock):
                 P(querytype="search", query="science", accumulate=True),
                 secrets={"twitter_credentials": DefaultSecret},
                 last_fetch_result=twitter.FetchResult(parquet_path),
+                input_table_parquet_path=None,
                 output_path=Path(tf.name),
             )
         assert result.errors == []
@@ -986,6 +1008,7 @@ def test_search_accumulate_truncate_and_delete_legacy_v0_in_tarfile(
                 P(querytype="search", query="science", accumulate=True),
                 secrets={"twitter_credentials": DefaultSecret},
                 last_fetch_result=twitter.FetchResult(Path(tarfile_tf.name)),
+                input_table_parquet_path=None,
                 output_path=Path(tf.name),
             )
         assert result.errors == []
@@ -1042,6 +1065,7 @@ def test_search_accumulate_keep_legacy_v0_in_tarfile(
                 P(querytype="search", query="science", accumulate=True),
                 secrets={"twitter_credentials": DefaultSecret},
                 last_fetch_result=twitter.FetchResult(Path(tarfile_tf.name)),
+                input_table_parquet_path=None,
                 output_path=Path(tf.name),
             )
         assert result.errors == []
@@ -1077,6 +1101,7 @@ def test_search_accumulate_delete_results_when_params_are_different(httpx_mock):
                 P(querytype="search", query="notscience", accumulate=True),
                 secrets={"twitter_credentials": DefaultSecret},
                 last_fetch_result=twitter.FetchResult(Path(tarfile_tf.name)),
+                input_table_parquet_path=None,
                 output_path=Path(tf.name),
             )
         assert result.errors == []
