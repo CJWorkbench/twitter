@@ -1,0 +1,89 @@
+#. default-message: Twitter
+msgid "_spec.name"
+msgstr ""
+
+#. default-message: Load tweets and metadata for a user, a list of users or keyword search.
+msgid "_spec.description"
+msgstr ""
+
+#. default-message: Search for
+msgid "_spec.parameters.querytype.name"
+msgstr ""
+
+#. default-message: User tweets
+msgid "_spec.parameters.querytype.options.user_timeline.label"
+msgstr ""
+
+#. default-message: Any tweet
+msgid "_spec.parameters.querytype.options.search.label"
+msgstr ""
+
+#. default-message: Twitter list
+msgid "_spec.parameters.querytype.options.lists_statuses.label"
+msgstr ""
+
+#. default-message: Keywords to match
+msgid "_spec.parameters.query.placeholder"
+msgstr ""
+
+#. default-message: @UserName
+msgid "_spec.parameters.username.placeholder"
+msgstr ""
+
+#. default-message: https://twitter.com/i/lists/123…
+msgid "_spec.parameters.listurl.placeholder"
+msgstr ""
+
+#. default-message: Update
+msgid "_spec.parameters.version_select.name"
+msgstr ""
+
+#. default-message: Accumulate tweets
+msgid "_spec.parameters.accumulate.name"
+msgstr ""
+
+#. default-message: Twitter API rate limit exceeded. Please wait a few minutes and try again.
+#: twitter.py:416
+msgid "error.tooManyRequests"
+msgstr ""
+
+#. default-message: User {username} does not exist
+#: twitter.py:424
+msgid "error.userDoesNotExist"
+msgstr ""
+
+#. default-message: User {username}'s tweets are private
+#: twitter.py:430
+msgid "error.userTweetsArePrivate"
+msgstr ""
+
+#. default-message: Error from Twitter API: {httpStatus} {error}
+#: twitter.py:437
+msgid "error.genericApiErrorV1_1"
+msgstr ""
+
+#. default-message: Error from Twitter API: {title}: {message}
+#: twitter.py:443
+msgid "error.genericApiErrorV2"
+msgstr ""
+
+#. default-message: Please enter a valid Twitter list URL
+#: twitter.py:538
+msgid "error.invalidList"
+msgstr ""
+
+#. default-message: Please enter a valid Twitter username
+#: twitter.py:548
+msgid "error.invalidUsername"
+msgstr ""
+
+#. default-message: Please enter a query
+#: twitter.py:1048
+msgid "error.noQuery"
+msgstr ""
+
+#. default-message: Please sign in to Twitter
+#: twitter.py:1055
+msgid "error.noCredentials"
+msgstr ""
+

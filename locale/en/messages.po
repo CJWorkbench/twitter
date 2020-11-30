@@ -1,0 +1,90 @@
+# English translations for PROJECT.
+# Copyright (C) 2020 ORGANIZATION
+# This file is distributed under the same license as the PROJECT project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2020.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PROJECT VERSION\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2020-11-30 15:23+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: en\n"
+"Language-Team: en <LL@li.org>\n"
+"Plural-Forms: nplurals=2; plural=(n != 1)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.9.0\n"
+
+msgid "_spec.name"
+msgstr "Twitter"
+
+msgid "_spec.description"
+msgstr "Load tweets and metadata for a user, a list of users or keyword search."
+
+msgid "_spec.parameters.querytype.name"
+msgstr "Search for"
+
+msgid "_spec.parameters.querytype.options.user_timeline.label"
+msgstr "User tweets"
+
+msgid "_spec.parameters.querytype.options.search.label"
+msgstr "Any tweet"
+
+msgid "_spec.parameters.querytype.options.lists_statuses.label"
+msgstr "Twitter list"
+
+msgid "_spec.parameters.query.placeholder"
+msgstr "Keywords to match"
+
+msgid "_spec.parameters.username.placeholder"
+msgstr "@UserName"
+
+msgid "_spec.parameters.listurl.placeholder"
+msgstr "https://twitter.com/i/lists/123…"
+
+msgid "_spec.parameters.version_select.name"
+msgstr "Update"
+
+msgid "_spec.parameters.accumulate.name"
+msgstr "Accumulate tweets"
+
+#: twitter.py:416
+msgid "error.tooManyRequests"
+msgstr "Twitter API rate limit exceeded. Please wait a few minutes and try again."
+
+#: twitter.py:424
+msgid "error.userDoesNotExist"
+msgstr "User {username} does not exist"
+
+#: twitter.py:430
+msgid "error.userTweetsArePrivate"
+msgstr "User {username}'s tweets are private"
+
+#: twitter.py:437
+msgid "error.genericApiErrorV1_1"
+msgstr "Error from Twitter API: {httpStatus} {error}"
+
+#: twitter.py:443
+msgid "error.genericApiErrorV2"
+msgstr "Error from Twitter API: {title}: {message}"
+
+#: twitter.py:538
+msgid "error.invalidList"
+msgstr "Please enter a valid Twitter list URL"
+
+#: twitter.py:548
+msgid "error.invalidUsername"
+msgstr "Please enter a valid Twitter username"
+
+#: twitter.py:1048
+msgid "error.noQuery"
+msgstr "Please enter a query"
+
+#: twitter.py:1055
+msgid "error.noCredentials"
+msgstr "Please sign in to Twitter"
+

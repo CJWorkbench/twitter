@@ -1,0 +1,90 @@
+# Greek translations for PROJECT.
+# Copyright (C) 2020 ORGANIZATION
+# This file is distributed under the same license as the PROJECT project.
+# FIRST AUTHOR <EMAIL@ADDRESS>, 2020.
+#
+#, fuzzy
+msgid ""
+msgstr ""
+"Project-Id-Version: PROJECT VERSION\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2020-11-30 15:23+0000\n"
+"PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language: el\n"
+"Language-Team: el <LL@li.org>\n"
+"Plural-Forms: nplurals=2; plural=(n != 1)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 2.9.0\n"
+
+msgid "_spec.name"
+msgstr ""
+
+msgid "_spec.description"
+msgstr ""
+
+msgid "_spec.parameters.querytype.name"
+msgstr ""
+
+msgid "_spec.parameters.querytype.options.user_timeline.label"
+msgstr ""
+
+msgid "_spec.parameters.querytype.options.search.label"
+msgstr ""
+
+msgid "_spec.parameters.querytype.options.lists_statuses.label"
+msgstr ""
+
+msgid "_spec.parameters.query.placeholder"
+msgstr ""
+
+msgid "_spec.parameters.username.placeholder"
+msgstr ""
+
+msgid "_spec.parameters.listurl.placeholder"
+msgstr ""
+
+msgid "_spec.parameters.version_select.name"
+msgstr ""
+
+msgid "_spec.parameters.accumulate.name"
+msgstr ""
+
+#: twitter.py:416
+msgid "error.tooManyRequests"
+msgstr ""
+
+#: twitter.py:424
+msgid "error.userDoesNotExist"
+msgstr ""
+
+#: twitter.py:430
+msgid "error.userTweetsArePrivate"
+msgstr ""
+
+#: twitter.py:437
+msgid "error.genericApiErrorV1_1"
+msgstr ""
+
+#: twitter.py:443
+msgid "error.genericApiErrorV2"
+msgstr ""
+
+#: twitter.py:538
+msgid "error.invalidList"
+msgstr ""
+
+#: twitter.py:548
+msgid "error.invalidUsername"
+msgstr ""
+
+#: twitter.py:1048
+msgid "error.noQuery"
+msgstr ""
+
+#: twitter.py:1055
+msgid "error.noCredentials"
+msgstr ""
+
