@@ -15,6 +15,12 @@ from cjwmodule.testing.i18n import cjwmodule_i18n_message, i18n_message
 import twitter
 
 
+def P(accumulate=False):
+    return {
+        "accumulate": accumulate,
+    }
+
+
 def dt(s):
     return dateutil.parser.parse(s, ignoretz=True)
 
@@ -74,13 +80,14 @@ def _temp_tarfile(
 
 def _assert_render(
     fetch_result: Optional[twitter.FetchResult],
+    params: Dict[str, Any],
     expected_table: Optional[pa.Table] = None,
     expected_errors: List[I18nMessage] = [],
 ):
     with tempfile.NamedTemporaryFile() as tf:
         output_path = Path(tf.name)
         actual_errors = twitter.render(
-            pa.table({}), {}, output_path, fetch_result=fetch_result
+            pa.table({}), params, output_path, fetch_result=fetch_result
         )
         assert actual_errors == expected_errors
         if expected_table is None:
@@ -107,7 +114,7 @@ def _assert_render(
 def test_render_empty_no_query():
     # When we haven't fetched, we shouldn't show any columns (for
     # consistency with other modules)
-    _assert_render(None, None, [])
+    _assert_render(None, P(accumulate=False), None, [])
 
 
 def test_render_fetch_generated_error():
@@ -116,6 +123,7 @@ def test_render_fetch_generated_error():
         twitter.FetchResult(
             Path("unused"), [twitter.RenderError(i18n_message("error.invalidUsername"))]
         ),
+        P(accumulate=False),
         None,
         [i18n_message("error.invalidUsername")],
     )
@@ -127,6 +135,7 @@ def test_render_empty_tarfile():
     with _temp_tarfile([]) as tar_path:
         _assert_render(
             twitter.FetchResult(tar_path, []),
+            P(accumulate=False),
             twitter.ARROW_SCHEMA.empty_table(),
             [],
         )
@@ -139,6 +148,7 @@ def test_render_v0_zero_column_search_result():
     with _temp_parquet_file(pa.table({})) as parquet_path:
         _assert_render(
             twitter.FetchResult(parquet_path, []),
+            P(accumulate=False),
             twitter.ARROW_SCHEMA.empty_table(),
             [],
         )
@@ -148,7 +158,18 @@ def test_render_v0_empty_table():
     with _temp_parquet_file(twitter.ARROW_SCHEMA.empty_table()) as parquet_path:
         _assert_render(
             twitter.FetchResult(parquet_path, []),
+            P(accumulate=False),
             twitter.ARROW_SCHEMA.empty_table(),
+            [],
+        )
+
+
+def test_render_v0_empty_table_accumulated():
+    with _temp_parquet_file(twitter.ARROW_SCHEMA.empty_table()) as parquet_path:
+        _assert_render(
+            twitter.FetchResult(parquet_path, []),
+            P(accumulate=True),
+            twitter.ACCUMULATED_SCHEMA.empty_table(),
             [],
         )
 
@@ -174,7 +195,12 @@ def test_render_v0_truncate_fetch_results():
         }
     )
     with _temp_parquet_file(all_rows) as parquet_path:
-        _assert_render(twitter.FetchResult(parquet_path, []), all_rows.slice(0, 1), [])
+        _assert_render(
+            twitter.FetchResult(parquet_path, []),
+            P(accumulate=False),
+            all_rows.slice(0, 1),
+            [],
+        )
 
 
 def test_render_v0_recover_after_bug_160258591():
@@ -203,6 +229,7 @@ def test_render_v0_recover_after_bug_160258591():
     with _temp_parquet_file(input_table) as parquet_path:
         _assert_render(
             twitter.FetchResult(parquet_path, []),
+            P(accumulate=False),
             (
                 input_table.set_column(3, "retweet_count", pa.array([0, 0]))
                 .set_column(4, "favorite_count", pa.array([0, 0]))
@@ -238,8 +265,52 @@ def test_render_v0_add_retweet_status_screen_name():
     with _temp_parquet_file(input_table) as parquet_path:
         _assert_render(
             twitter.FetchResult(parquet_path, []),
+            P(accumulate=False),
             input_table.add_column(
                 6, "retweeted_status_screen_name", pa.array([None, None], pa.utf8())
+            ),
+            [],
+        )
+
+
+def test_render_v0_add_retweet_status_screen_name_accumulated():
+    # Migration: what happens when we accumulate tweets
+    # where the old stored table does not have retweet_status_screen_name?
+    # We should consider those to have just None in that column
+    input_table = pa.table(
+        {
+            "screen_name": ["TheTweepyTester", "TheTweepyTester"],
+            "created_at": pa.array(
+                [dt("2016-11-05T21:38:46Z"), dt("2016-11-05T21:37:13Z")],
+                pa.timestamp("ns"),
+            ),
+            "text": ["Hello", "testing 1000 https://t.co/3vt8ITRQ3w"],
+            "retweet_count": [0, 0],
+            "favorite_count": [0, 0],
+            "in_reply_to_screen_name": pa.array([None, None], pa.utf8()),
+            "retweeted_status_screen_name": pa.array([None, None], pa.utf8()),
+            "user_description": ["", ""],
+            "source": ["Twitter Web Client", "Tweepy dev"],
+            "lang": ["en", "en"],
+            "id": [795017539831103489, 795017147651162112],
+        }
+    )
+    with _temp_parquet_file(input_table) as parquet_path:
+        _assert_render(
+            twitter.FetchResult(parquet_path, []),
+            P(accumulate=True),
+            input_table.select(
+                [
+                    "screen_name",
+                    "created_at",
+                    "text",
+                    "in_reply_to_screen_name",
+                    "retweeted_status_screen_name",
+                    "user_description",
+                    "source",
+                    "lang",
+                    "id",
+                ]
             ),
             [],
         )
@@ -257,6 +328,7 @@ def test_render_retweeted_status_full_text_twitter_api_v1():
     ) as tar_path:
         _assert_render(
             twitter.FetchResult(tar_path, []),
+            P(accumulate=False),
             pa.table(
                 {
                     "screen_name": ["workbenchdata"],
@@ -296,6 +368,7 @@ def test_render_undefined_language_is_null():
     ) as tar_path:
         _assert_render(
             twitter.FetchResult(tar_path, []),
+            P(accumulate=False),
             pa.table(
                 {
                     "screen_name": ["workbenchdata"],
@@ -332,6 +405,7 @@ def test_v2_one_sample_search_api_response():
     ) as tar_path:
         _assert_render(
             twitter.FetchResult(tar_path, []),
+            P(accumulate=False),
             pa.table(
                 {
                     "screen_name": [
@@ -445,6 +519,40 @@ def test_v2_one_sample_search_api_response():
         )
 
 
+def test_v2_one_sample_search_api_response_accumulate():
+    with _temp_tarfile(
+        [
+            lambda: _temp_json_path_lz4(
+                "1332344846833639425.json.lz4",
+                Path("tests/files/2_tweets_search_recent_page_1.json"),
+                {"cjw:apiEndpoint": "2/tweets/search/recent"},
+            )
+        ]
+    ) as tar_path:
+        with tempfile.NamedTemporaryFile() as tf:
+            output_path = Path(tf.name)
+            actual_errors = twitter.render(
+                pa.table({}),
+                P(accumulate=True),
+                output_path=output_path,
+                fetch_result=twitter.FetchResult(tar_path, []),
+            )
+            assert actual_errors == []
+            with pa.ipc.open_file(tf.name) as f:
+                actual_table = f.read_all()
+            assert actual_table.column_names == [
+                "screen_name",
+                "created_at",
+                "text",
+                "in_reply_to_screen_name",
+                "retweeted_status_screen_name",
+                "user_description",
+                "source",
+                "lang",
+                "id",
+            ]
+
+
 def test_render_network_error():
     with _temp_tarfile(
         [
@@ -461,6 +569,7 @@ def test_render_network_error():
     ) as tar_path:
         _assert_render(
             twitter.FetchResult(tar_path, []),
+            P(accumulate=False),
             None,
             [
                 cjwmodule_i18n_message(
@@ -488,6 +597,7 @@ def test_render_http_429():
     ) as tar_path:
         _assert_render(
             twitter.FetchResult(tar_path, []),
+            P(accumulate=False),
             None,
             [i18n_message("error.tooManyRequests")],
         )
@@ -509,6 +619,7 @@ def test_render_http_401_user_tweets_are_private():
     ) as tar_path:
         _assert_render(
             twitter.FetchResult(tar_path, []),
+            P(accumulate=False),
             None,
             [i18n_message("error.userTweetsArePrivate", {"username": "elizabeth1"})],
         )
@@ -530,6 +641,7 @@ def test_render_http_404_username_not_found():
     ) as tar_path:
         _assert_render(
             twitter.FetchResult(tar_path, []),
+            P(accumulate=False),
             None,
             [
                 i18n_message(
@@ -555,6 +667,7 @@ def test_render_v1_1_generic_api_error():
     ) as tar_path:
         _assert_render(
             twitter.FetchResult(tar_path, []),
+            P(accumulate=False),
             None,
             [
                 i18n_message(
@@ -584,6 +697,7 @@ def test_render_v2_generic_api_error():
     ) as tar_path:
         _assert_render(
             twitter.FetchResult(tar_path, []),
+            P(accumulate=False),
             None,
             [
                 i18n_message(

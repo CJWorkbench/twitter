@@ -229,6 +229,7 @@ class Column(NamedTuple):
     v1_path: List[Union[str, int, Callable]]
     v2_path: List[Union[str, int, Callable]]
     dtype: pa.DataType
+    accumulable: bool
 
 
 Columns = [
@@ -237,32 +238,37 @@ Columns = [
         ["user", "screen_name"],
         ["author_id", "[user]", "username"],
         pa.utf8(),
+        True,
     ),
     Column(
         "created_at",
         ["created_at", parsedate_to_datetime],
         ["created_at", dateutil.parser.isoparse],
         pa.timestamp("ns"),
+        True,
     ),
     # _parse_v2_tweet_text() is special-cased to allow extra params
-    Column("text", [_parse_v1_tweet_text], [_parse_v2_tweet_text], pa.utf8()),
+    Column("text", [_parse_v1_tweet_text], [_parse_v2_tweet_text], pa.utf8(), True),
     Column(
         "retweet_count",
         ["retweet_count"],
         ["public_metrics", "retweet_count"],
         pa.int64(),
+        False,
     ),
     Column(
         "favorite_count",
         ["favorite_count"],
         ["public_metrics", "like_count"],
         pa.int64(),
+        False,
     ),
     Column(
         "in_reply_to_screen_name",
         ["in_reply_to_screen_name"],
         ["in_reply_to_user_id", "[user]", "username"],
         pa.utf8(),
+        True,
     ),
     Column(
         "retweeted_status_screen_name",
@@ -277,20 +283,27 @@ Columns = [
             "username",
         ],
         pa.utf8(),
+        True,
     ),
     Column(
         "user_description",
         ["user", "description"],
         ["author_id", "[user]", "description"],
         pa.utf8(),
+        True,
     ),
-    Column("source", ["source", _parse_source], ["source", _parse_source], pa.utf8()),
-    Column("lang", ["lang", _parse_lang], ["lang", _parse_lang], pa.utf8()),
-    Column("id", ["id"], ["id", int], pa.int64()),
+    Column(
+        "source", ["source", _parse_source], ["source", _parse_source], pa.utf8(), True
+    ),
+    Column("lang", ["lang", _parse_lang], ["lang", _parse_lang], pa.utf8(), True),
+    Column("id", ["id"], ["id", int], pa.int64(), True),
 ]
 
 
 ARROW_SCHEMA = pa.schema({column.name: column.dtype for column in Columns})
+ACCUMULATED_SCHEMA = pa.schema(
+    {column.name: column.dtype for column in Columns if column.accumulable}
+)
 
 
 def _recover_from_160258591(table: pa.Table) -> pa.Table:
@@ -336,7 +349,9 @@ def _tweets_to_column_list(
     return records
 
 
-def _twitter_v1_records_to_record_batch(data: Dict[str, Any]) -> pa.RecordBatch:
+def _twitter_v1_records_to_record_batch(
+    data: Dict[str, Any], accumulated: bool
+) -> pa.RecordBatch:
     # `data` is an Array of tweets
     return pa.record_batch(
         [
@@ -347,12 +362,15 @@ def _twitter_v1_records_to_record_batch(data: Dict[str, Any]) -> pa.RecordBatch:
                 expanded_tweets={},
             )
             for column in Columns
+            if column.accumulable or not accumulated
         ],
-        ARROW_SCHEMA,
+        ACCUMULATED_SCHEMA if accumulated else ARROW_SCHEMA,
     )
 
 
-def _twitter_v2_records_to_record_batch(data: Dict[str, Any]) -> pa.RecordBatch:
+def _twitter_v2_records_to_record_batch(
+    data: Dict[str, Any], accumulated: bool
+) -> pa.RecordBatch:
     # `data` is an Object with keys `data` (Array), `meta`, `includes`.
     expanded_users = {u["id"]: u for u in data["includes"]["users"]}
     expanded_tweets = {t["id"]: t for t in data["includes"]["tweets"]}
@@ -365,8 +383,9 @@ def _twitter_v2_records_to_record_batch(data: Dict[str, Any]) -> pa.RecordBatch:
                 expanded_tweets=expanded_tweets,
             )
             for column in Columns
+            if column.accumulable or not accumulated
         ],
-        ARROW_SCHEMA,
+        ACCUMULATED_SCHEMA if accumulated else ARROW_SCHEMA,
     )
 
 
@@ -387,7 +406,7 @@ LIST_OWNER_SCREEN_NAME_SLUG_REGEX = re.compile(
 
 
 def _render_legacy_file_format_v0_record_batches(
-    parquet_bytes: bytes,
+    parquet_bytes: bytes, accumulated: bool
 ) -> List[pa.RecordBatch]:
     arrow_table = pyarrow.parquet.read_table(io.BytesIO(parquet_bytes))
 
@@ -406,6 +425,9 @@ def _render_legacy_file_format_v0_record_batches(
     # FetchResultFile.get_result_parts() would not have yielded this Parquet
     # file
     arrow_table = _recover_from_160258591(arrow_table)
+
+    if accumulated:
+        arrow_table = arrow_table.select([c.name for c in Columns if c.accumulable])
 
     return arrow_table.to_batches()
 
@@ -451,6 +473,7 @@ def _render_api_error(
 
 def _render_file_format_v1(
     path: Path,
+    accumulated: bool,
 ) -> Tuple[Optional[pa.Table], List[i18n.I18nMessage]]:
     record_batches = []
     result = FetchResultFile(path)
@@ -476,38 +499,48 @@ def _render_file_format_v1(
                 lz4.frame.decompress(result_part.body).decode("utf-8")
             )
             if result_part.api_endpoint.startswith("2/"):
-                record_batch = _twitter_v2_records_to_record_batch(json_records)
+                record_batch = _twitter_v2_records_to_record_batch(
+                    json_records, accumulated
+                )
             else:
-                record_batch = _twitter_v1_records_to_record_batch(json_records)
+                record_batch = _twitter_v1_records_to_record_batch(
+                    json_records, accumulated
+                )
             record_batches.append(record_batch)
         elif result_part.name == "LEGACY.parquet":
             record_batches.extend(
-                _render_legacy_file_format_v0_record_batches(result_part.body)
+                _render_legacy_file_format_v0_record_batches(
+                    result_part.body, accumulated
+                )
             )
         else:
             raise NotImplementedError(
                 "Unhandled file '%s'" % result_part.name
             )  # pragma: no cover
 
-    table = pa.Table.from_batches(record_batches, schema=ARROW_SCHEMA)
+    table = pa.Table.from_batches(
+        record_batches, schema=ACCUMULATED_SCHEMA if accumulated else ARROW_SCHEMA
+    )
     if len(table) > TWITTER_MAX_ROWS_PER_TABLE:
         table = table.slice(0, TWITTER_MAX_ROWS_PER_TABLE)
+
     table = table.combine_chunks()  # Workbench needs max 1 record batch
     return table, []
 
 
 # Render just returns previously retrieved tweets
 def render(arrow_table, params, output_path, *, fetch_result, **kwargs):
-
     if fetch_result is None:
         return []
 
     if fetch_result.errors:
         return list(error.message for error in fetch_result.errors)
 
-    table, errors = _render_file_format_v1(fetch_result.path)
+    table, errors = _render_file_format_v1(
+        fetch_result.path, accumulated=params["accumulate"]
+    )
     if table is not None:
-        with pa.ipc.RecordBatchFileWriter(output_path, ARROW_SCHEMA) as writer:
+        with pa.ipc.RecordBatchFileWriter(output_path, table.schema) as writer:
             writer.write_table(table)
 
     return errors  # TODO format "id" column
