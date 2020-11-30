@@ -17,8 +17,12 @@
   version. That's because Twitter's API responses contain small differences,
   even when the final table looks the same. (Previously we stored the final
   table. Now we store the API responses.)
-* "Search": use Twitter API v2. This gives nicer error messages for search
   syntax errors.
 * Use `httpx` for fetches. This gives nicer error messages for network
   errors.
 * Allow translation (i18n) of errors.
+
+There was also an ill-fated experiment with Twitter API v2. This was deployed
+from 2020-11-30T17:00:00Z to 2020-11-30T17:30:00Z. During this period, some
+"Search" queries produced errors. Users may re-run the queries to remove the
+errors.
