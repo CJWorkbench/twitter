@@ -394,17 +394,22 @@ def _render_api_error(
                 {"username": username},
             )
 
-    error = json.loads(data.decode("utf-8"))
     if api_endpoint.startswith("1.1/"):
+        try:
+            error = json.loads(data.decode("utf-8"))
+            message = error["error"]
+        except (KeyError, IndexError, ValueError):
+            message = data.decode("utf-8")
         return i18n.trans(
             "error.genericApiErrorV1_1",
             "Error from Twitter API: {httpStatus} {error}",
-            {"httpStatus": http_status, "error": error["error"]},
+            {"httpStatus": http_status, "error": message},
         )
     else:
         try:
+            error = json.loads(data.decode("utf-8"))
             message = error["errors"][0]["message"]
-        except (KeyError, IndexError):
+        except (KeyError, IndexError, ValueError):
             message = data.decode("utf-8")
         return i18n.trans(
             "error.genericApiErrorV2",
