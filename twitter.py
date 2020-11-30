@@ -6,11 +6,12 @@ FILE FORMAT (v1)
 A tarfile with zero or more of the following files (in order):
 
 * Potentially one of the following error files:
-    * `API-ERROR.json.lz4`: Similar to `[max-tweet-id].json.lz4`; but
-      the JSON body is an error and there is no `cjw.nTweets`.
+    * `API-ERROR.lz4`: Similar to `[max-tweet-id].json.lz4`; but the body is an
+       error (usually JSON, but not when `cjw:httpStatus` is `429`) and there is
+       no `cjw:nTweets`.
     * `NETWORK-ERROR.json.lz4`: Similar to `[max-tweet-id].json.lz4`;
       but there is no `cjw.httpStatus` or `cjw.nTweets` and the JSON body is an
-      `I18nMessage`.
+      `I18nMessage` (JSON Object with keys `id`, `arguments` and `source`).
 * Any number of `[max-tweet-id].json.lz4` files (ending in ".json"), ordered by
   descending max-tweet-id. For each, tar extended headers apply:
     * mtime is HTTP `date` header from Twitter HTTP response
@@ -23,7 +24,7 @@ A tarfile with zero or more of the following files (in order):
     * Body is lz4-compressed Twitter API response (which is UTF8-encoded JSON).
 * Potentially `LEGACY.parquet`: see "LEGACY FILE FORMAT (v0)" below.
 
-Only one `API-ERROR.json.lz4` or `NETWORK-ERROR.json.lz4` file may exist. It
+Only one `API-ERROR.lz4` or `NETWORK-ERROR.json.lz4` file may exist. It
 indicates that the most recent request did not produce new data. (We don't store
 any indicator that other requests failed.)
 
@@ -454,7 +455,7 @@ def _render_file_format_v1(
     record_batches = []
     result = FetchResultFile(path)
     for result_part in result.get_result_parts():
-        if result_part.name == "API-ERROR.json.lz4":
+        if result_part.name == "API-ERROR.lz4":
             return None, [
                 _render_api_error(
                     result_part.api_endpoint,
@@ -593,7 +594,7 @@ class ResultPart(NamedTuple):
     name: str
     """Name of file:
 
-    * API-ERROR.json.lz4 (must be first)
+    * API-ERROR.lz4 (must be first)
     * NETWORK-ERROR.json.lz4 (must be first)
     * [max-tweet-id].json.lz4
     * LEGACY.parquet (must be last)
@@ -699,9 +700,7 @@ class FetchResultFile:
 
         with tarfile.open(self.path, mode="r") as tf:
             for ti in tf:
-                if ti.name.endswith(".json.lz4") and not ti.name.endswith(
-                    "-ERROR.json.lz4"
-                ):
+                if ti.name.endswith(".json.lz4") and "ERROR" not in ti.name:
                     return int(ti.name[:-9])
                 if ti.name == "LEGACY.parquet":
                     with tarfile.TarFile.fileobject(tf, ti) as f:
@@ -737,7 +736,7 @@ class FetchResultFile:
 
         with tarfile.open(self.path, "r") as tf:
             ti = tf.firstmember
-            if ti is not None and ti.name.endswith("-ERROR.json.lz4"):
+            if ti is not None and "ERROR" in ti.name:
                 # Read the body into RAM. When we return, we'll close the tarfile
                 # so any fileobject within it would be invalid.
                 body = tarfile.TarFile.fileobject(tf, ti).read()
@@ -776,7 +775,7 @@ async def _fetch_paginated(
 
     Return empty list if there are no tweets.
 
-    Return a single "API-ERROR.json.lz4" result if Twitter responds negatively
+    Return a single "API-ERROR.lz4" result if Twitter responds negatively
     to any request.
 
     Return a single "NETWORK-ERROR.json.lz4" result if we fail to receive a
@@ -855,7 +854,7 @@ async def _call_twitter_api_once(
     except HttpErrorNotSuccess as err:
         return (
             ResultPart(
-                "API-ERROR.json.lz4",
+                "API-ERROR.lz4",
                 mtime=parsedate_to_datetime(err.response.headers["date"]).timestamp(),
                 api_endpoint=api_endpoint,
                 api_params=api_params,
@@ -916,7 +915,7 @@ async def _fetch_paginated_1_1(
 
     Return empty list if there are no tweets.
 
-    Return a single "API-ERROR.json.lz4" result if Twitter responds negatively
+    Return a single "API-ERROR.lz4" result if Twitter responds negatively
     to any request.
 
     Return a single "NETWORK-ERROR.json.lz4" result if we fail to receive a
@@ -951,7 +950,7 @@ async def _fetch_paginated_1_1(
         if not result_part:
             break  # no tweets: don't add this to the tarfile
 
-        if result_part.name.endswith("-ERROR.json.lz4"):
+        if "ERROR" in result_part.name:
             return [result_part]
 
         retval.append(result_part)
@@ -974,7 +973,7 @@ async def _fetch_paginated_2(
 
     Return empty list if there are no tweets.
 
-    Return a single "API-ERROR.json.lz4" result if Twitter responds negatively
+    Return a single "API-ERROR.lz4" result if Twitter responds negatively
     to any request.
 
     Return a single "NETWORK-ERROR.json.lz4" result if we fail to receive a
@@ -1093,11 +1092,7 @@ def fetch_arrow(
         shutil.copyfile(last_result.path, output_path)
         return FetchResult(output_path, last_fetch_result.errors)
 
-    if (
-        last_result
-        and len(new_results) == 1
-        and new_results[0].name.endswith("-ERROR.json.lz4")
-    ):
+    if last_result and len(new_results) == 1 and "ERROR" in new_results[0].name:
         new_error = new_results[0]
         last_error = last_result.get_error_result_part()
         if (
@@ -1121,7 +1116,7 @@ def fetch_arrow(
                     break
         if last_result and n_tweets_allowed > 0:
             for result_part in last_result.get_result_parts():
-                if result_part.name.endswith("-ERROR.json.lz4"):
+                if "ERROR" in result_part.name:
                     # new_results either gave an error or gave no errors. Either
                     # way, don't write the _old_ error.
                     continue

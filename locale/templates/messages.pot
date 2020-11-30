@@ -43,47 +43,47 @@ msgid "_spec.parameters.accumulate.name"
 msgstr ""
 
 #. default-message: Twitter API rate limit exceeded. Please wait a few minutes and try again.
-#: twitter.py:416
+#: twitter.py:417
 msgid "error.tooManyRequests"
 msgstr ""
 
 #. default-message: User {username} does not exist
-#: twitter.py:424
+#: twitter.py:425
 msgid "error.userDoesNotExist"
 msgstr ""
 
 #. default-message: User {username}'s tweets are private
-#: twitter.py:430
+#: twitter.py:431
 msgid "error.userTweetsArePrivate"
 msgstr ""
 
 #. default-message: Error from Twitter API: {httpStatus} {error}
-#: twitter.py:438
+#: twitter.py:439
 msgid "error.genericApiErrorV1_1"
 msgstr ""
 
 #. default-message: Error from Twitter API: {title}: {message}
-#: twitter.py:444
+#: twitter.py:445
 msgid "error.genericApiErrorV2"
 msgstr ""
 
 #. default-message: Please enter a valid Twitter list URL
-#: twitter.py:539
+#: twitter.py:540
 msgid "error.invalidList"
 msgstr ""
 
 #. default-message: Please enter a valid Twitter username
-#: twitter.py:549
+#: twitter.py:550
 msgid "error.invalidUsername"
 msgstr ""
 
 #. default-message: Please enter a query
-#: twitter.py:1049
+#: twitter.py:1048
 msgid "error.noQuery"
 msgstr ""
 
 #. default-message: Please sign in to Twitter
-#: twitter.py:1056
+#: twitter.py:1055
 msgid "error.noCredentials"
 msgstr ""
 

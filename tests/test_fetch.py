@@ -251,7 +251,7 @@ def test_user_timeline_accumulate_one_error_aborts_all(httpx_mock: HTTPXMock):
         parts = result_file.get_result_parts()
 
         page1 = next(parts)
-        assert page1.name == "API-ERROR.json.lz4"
+        assert page1.name == "API-ERROR.lz4"
         assert lz4.frame.decompress(page1.body) == b"XXratelimitXX"
         assert page1.n_tweets is None
         assert page1.http_status == "429"
@@ -284,7 +284,7 @@ def test_user_timeline_accumulate_ignore_duplicate_error(httpx_mock: HTTPXMock):
     with tempfile.NamedTemporaryFile() as tf:
         with tempfile.NamedTemporaryFile() as tarfile_tf:
             with tarfile.open(tarfile_tf.name, "w") as tar:
-                ti = tarfile.TarInfo("API-ERROR.json.lz4")
+                ti = tarfile.TarInfo("API-ERROR.lz4")
                 api_error_bytes = lz4.frame.compress(b"same response as last time")
                 ti.size = len(api_error_bytes)
                 ti.mtime = 1234.0
@@ -332,7 +332,7 @@ def test_user_timeline_accumulate_replace_different_error(httpx_mock: HTTPXMock)
     with tempfile.NamedTemporaryFile() as tf:
         with tempfile.NamedTemporaryFile() as tarfile_tf:
             with tarfile.open(tarfile_tf.name, "w") as tar:
-                ti = tarfile.TarInfo("API-ERROR.json.lz4")
+                ti = tarfile.TarInfo("API-ERROR.lz4")
                 api_error_bytes = lz4.frame.compress(b"same response as last time")
                 ti.size = len(api_error_bytes)
                 ti.mtime = 1234.0
@@ -366,7 +366,7 @@ def test_user_timeline_accumulate_replace_different_error(httpx_mock: HTTPXMock)
         parts = result_file.get_result_parts()
 
         page1 = next(parts)
-        assert page1.name == "API-ERROR.json.lz4"
+        assert page1.name == "API-ERROR.lz4"
         assert lz4.frame.decompress(page1.body) == b"new error"
         assert page1.mtime == 1606485103.0
         assert page1.n_tweets is None
@@ -425,7 +425,7 @@ def test_user_timeline_accumulate_error_atop_v0(httpx_mock: HTTPXMock):
         result_file = twitter.FetchResultFile(result.path)
         parts = result_file.get_result_parts()
         assert list(part.name for part in parts) == [
-            "API-ERROR.json.lz4",
+            "API-ERROR.lz4",
             "LEGACY.parquet",
         ]
 
@@ -597,7 +597,7 @@ def test_user_timeline_404_user_does_not_exist(httpx_mock: HTTPXMock):
         parts = list(result_file.get_result_parts())
         assert len(parts) == 1
         part1 = parts[0]
-        assert part1.name == "API-ERROR.json.lz4"
+        assert part1.name == "API-ERROR.lz4"
         assert (
             lz4.frame.decompress(part1.body)
             == b'{"errors":[{"code":34,"message":"Sorry, that page does not exist."}]}'
@@ -635,7 +635,7 @@ def test_user_timeline_401_tweets_are_private(httpx_mock: HTTPXMock):
         parts = list(result_file.get_result_parts())
         assert len(parts) == 1
         part1 = parts[0]
-        assert part1.name == "API-ERROR.json.lz4"
+        assert part1.name == "API-ERROR.lz4"
         assert part1.http_status == "401"
 
 
@@ -891,7 +891,7 @@ def test_search_accumulate_read_max_tweet_id_from_legacy_parquet(httpx_mock: HTT
             parquet_bytes = parquet_path.read_bytes()
         with tempfile.NamedTemporaryFile() as tarfile_tf:
             with tarfile.open(tarfile_tf.name, "w") as tar:
-                ti = tarfile.TarInfo("API-ERROR.json.lz4")
+                ti = tarfile.TarInfo("API-ERROR.lz4")
                 ti.size = len(b"unused contents")
                 ti.pax_headers["cjw:apiEndpoint"] = "2/tweets/search/recent"
                 ti.pax_headers[

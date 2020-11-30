@@ -476,7 +476,7 @@ def test_render_http_429():
         [
             lambda: contextlib.nullcontext(
                 (
-                    "API-ERROR.json.lz4",
+                    "API-ERROR.lz4",
                     lz4.frame.compress(b"Rate limit exceeded"),
                     {
                         "cjw:apiEndpoint": "2/tweets/search/recent",
@@ -497,7 +497,7 @@ def test_render_http_401_user_tweets_are_private():
     with _temp_tarfile(
         [
             lambda: _temp_json_lz4(
-                "API-ERROR.json.lz4",
+                "API-ERROR.lz4",
                 {"error": "doesn't really matter"},
                 {
                     "cjw:apiEndpoint": "1.1/statuses/user_timeline",
@@ -518,7 +518,7 @@ def test_render_http_404_username_not_found():
     with _temp_tarfile(
         [
             lambda: _temp_json_lz4(
-                "API-ERROR.json.lz4",
+                "API-ERROR.lz4",
                 {"error": "doesn't really matter"},
                 {
                     "cjw:apiEndpoint": "1.1/statuses/user_timeline",
@@ -543,7 +543,7 @@ def test_render_v1_1_generic_api_error():
     with _temp_tarfile(
         [
             lambda: _temp_json_lz4(
-                "API-ERROR.json.lz4",
+                "API-ERROR.lz4",
                 {"error": "a message from Twitter"},
                 {
                     "cjw:apiEndpoint": "1.1/statuses/user_timeline",
@@ -569,7 +569,7 @@ def test_render_v2_generic_api_error():
     with _temp_tarfile(
         [
             lambda: _temp_json_lz4(
-                "API-ERROR.json.lz4",
+                "API-ERROR.lz4",
                 {
                     "title": "bad-request",
                     "errors": [{"message": "a message from Twitter"}],
