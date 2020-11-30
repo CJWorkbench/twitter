@@ -23,6 +23,6 @@
 * Allow translation (i18n) of errors.
 
 There was also an ill-fated experiment with Twitter API v2. This was deployed
-from 2020-11-30T17:00:00Z to 2020-11-30T17:30:00Z. During this period, some
+from 2020-11-30T19:00:00Z to 2020-11-30T19:30:00Z. During this period, some
 "Search" queries produced errors. Users may re-run the queries to remove the
 errors.
