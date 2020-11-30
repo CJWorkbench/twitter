@@ -308,6 +308,9 @@ def _tweets_to_column_list(
 def _twitter_v1_records_to_record_batch(
     data: Dict[str, Any], accumulated: bool
 ) -> pa.RecordBatch:
+    if isinstance(data, dict) and "statuses" in data:
+        data = data["statuses"]  # 1.1/search/tweets.json
+
     # `data` is an Array of tweets
     return pa.record_batch(
         [
@@ -885,7 +888,11 @@ async def _call_twitter_api_once(
 
 async def _fetch_paginated_1_1(
     client: httpx.Client,
-    endpoint: Literal["1.1/lists/statuses.json", "1.1/statuses/user_timeline.json"],
+    endpoint: Literal[
+        "1.1/lists/statuses.json",
+        "1.1/statuses/user_timeline.json",
+        "1.1/search/tweets.json",
+    ],
     params: Dict[str, Any],
     *,
     oauth_client: oauth1.Client,
@@ -906,6 +913,27 @@ async def _fetch_paginated_1_1(
     """
     retval: List[ResultPart] = []  # result, unless we hit an error
     max_id = None
+
+    if endpoint == "1.1/search/tweets.json":
+
+        def get_n_tweets(data):
+            return len(data["statuses"])
+
+        def get_max_tweet_id(data):
+            return data["statuses"][0]["id"]
+
+        def get_next_token(data):
+            return data["statuses"][-1]["id"]
+
+    else:
+        get_n_tweets = len
+
+        def get_max_tweet_id(data):
+            return data[0]["id"]
+
+        def get_next_token(data):
+            return data[-1]["id"]
+
     for _ in range(max_n_requests):
         page_params = {
             **params,
@@ -921,9 +949,9 @@ async def _fetch_paginated_1_1(
             endpoint,
             page_params,
             oauth_client=oauth_client,
-            get_n_tweets=len,
-            get_max_tweet_id=lambda d: d[0]["id"],
-            get_next_token=lambda d: d[-1]["id"],  # next_token is v2 nomenclature
+            get_n_tweets=get_n_tweets,
+            get_max_tweet_id=get_max_tweet_id,
+            get_next_token=get_next_token,  # next_token is v2 nomenclature
         )
 
         if not result_part:
