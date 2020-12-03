@@ -495,6 +495,38 @@ def test_user_timeline_accumulate_atop_v0(httpx_mock: HTTPXMock):
             next(parts)
 
 
+def test_user_timeline_accumulate_atop_empty_file(httpx_mock: HTTPXMock):
+    httpx_mock.add_response(
+        url="https://api.twitter.com/1.1/statuses/user_timeline.json?count=200&include_entities=false&screen_name=adamhooper&tweet_mode=extended",
+        data=Path(
+            "tests/files/1_1_statuses_user_timeline_json_adamhooper_page_2.json"
+        ).read_bytes(),
+        headers={"date": "Fri Nov 27 2020 13:51:44 GMT"},
+    )
+    httpx_mock.add_response(
+        url="https://api.twitter.com/1.1/statuses/user_timeline.json?count=200&include_entities=false&max_id=1246131326031466497&screen_name=adamhooper&tweet_mode=extended",
+        data=b"[]",
+        headers={"date": "Fri Nov 27 2020 13:51:45 GMT"},
+    )
+
+    with tempfile.NamedTemporaryFile() as tf:
+        with tempfile.NamedTemporaryFile() as parquet_tf:
+            result = twitter.fetch_arrow(
+                P(querytype="user_timeline", username="@adamhooper", accumulate=True),
+                secrets={"twitter_credentials": DefaultSecret},
+                last_fetch_result=twitter.FetchResult(Path(parquet_tf.name)),
+                input_table_parquet_path=None,
+                output_path=Path(tf.name),
+            )
+        assert result.errors == []
+
+        assert result.path == Path(tf.name)
+        result_file = twitter.FetchResultFile(result.path)
+        assert [p.name for p in result_file.get_result_parts()] == [
+            "1246131326031466498.json.lz4"
+        ]
+
+
 def test_user_timeline_no_accumulate(httpx_mock: HTTPXMock):
     httpx_mock.add_response(
         url="https://api.twitter.com/1.1/statuses/user_timeline.json?count=200&include_entities=false&screen_name=adamhooper&tweet_mode=extended",

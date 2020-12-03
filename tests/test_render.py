@@ -129,6 +129,18 @@ def test_render_fetch_generated_error():
     )
 
 
+def test_render_empty_file():
+    # When we haven't fetched, we shouldn't show any columns (for
+    # consistency with other modules)
+    with tempfile.NamedTemporaryFile() as tf:
+        _assert_render(
+            twitter.FetchResult(Path(tf.name), []),
+            P(accumulate=False),
+            twitter.ARROW_SCHEMA.empty_table(),
+            [],
+        )
+
+
 def test_render_empty_tarfile():
     # When we haven't fetched, we shouldn't show any columns (for
     # consistency with other modules)

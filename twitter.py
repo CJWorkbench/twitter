@@ -3,7 +3,8 @@
 FILE FORMAT (v1)
 ================
 
-A tarfile with zero or more of the following files (in order):
+Either an empty file, or a tarfile with zero or more of the following files (in
+order):
 
 * Potentially one of the following error files:
     * `API-ERROR.lz4`: Similar to `[max-tweet-id].json.lz4`; but the body is an
@@ -49,7 +50,7 @@ Rationale:
 LEGACY FILE FORMAT (v0)
 -----------------------
 
-A Parquet file, sorted by descending `id`, of columns:
+Parquet file sorted by descending `id`, with columns:
 
 * screen_name: utf8
 * created_at: timestamp
@@ -423,43 +424,44 @@ def _render_file_format_v1(
     accumulated: bool,
 ) -> Tuple[Optional[pa.Table], List[i18n.I18nMessage]]:
     record_batches = []
-    result = FetchResultFile(path)
-    for result_part in result.get_result_parts():
-        if result_part.name == "API-ERROR.lz4":
-            return None, [
-                _render_api_error(
-                    result_part.api_endpoint,
-                    result_part.api_params,
-                    result_part.http_status,
-                    lz4.frame.decompress(result_part.body),
+    if path.stat().st_size > 0:
+        result = FetchResultFile(path)
+        for result_part in result.get_result_parts():
+            if result_part.name == "API-ERROR.lz4":
+                return None, [
+                    _render_api_error(
+                        result_part.api_endpoint,
+                        result_part.api_params,
+                        result_part.http_status,
+                        lz4.frame.decompress(result_part.body),
+                    )
+                ]
+            elif result_part.name == "NETWORK-ERROR.json.lz4":
+                # NETWORK-ERROR is already an I18nMessage
+                return None, [
+                    i18n.I18nMessage(
+                        **json.loads(lz4.frame.decompress(result_part.body)),
+                    )
+                ]
+            elif result_part.name.endswith(".json.lz4"):
+                json_records = json.loads(
+                    lz4.frame.decompress(result_part.body).decode("utf-8")
                 )
-            ]
-        elif result_part.name == "NETWORK-ERROR.json.lz4":
-            # NETWORK-ERROR is already an I18nMessage
-            return None, [
-                i18n.I18nMessage(
-                    **json.loads(lz4.frame.decompress(result_part.body)),
+                record_batch = _twitter_v1_records_to_record_batch(
+                    json_records, accumulated
                 )
-            ]
-        elif result_part.name.endswith(".json.lz4"):
-            json_records = json.loads(
-                lz4.frame.decompress(result_part.body).decode("utf-8")
-            )
-            record_batch = _twitter_v1_records_to_record_batch(
-                json_records, accumulated
-            )
-            if len(record_batch):
-                record_batches.append(record_batch)
-        elif result_part.name == "LEGACY.parquet":
-            record_batches.extend(
-                _render_legacy_file_format_v0_record_batches(
-                    result_part.body, accumulated
+                if len(record_batch):
+                    record_batches.append(record_batch)
+            elif result_part.name == "LEGACY.parquet":
+                record_batches.extend(
+                    _render_legacy_file_format_v0_record_batches(
+                        result_part.body, accumulated
+                    )
                 )
-            )
-        else:
-            raise NotImplementedError(
-                "Unhandled file '%s'" % result_part.name
-            )  # pragma: no cover
+            else:
+                raise NotImplementedError(
+                    "Unhandled file '%s'" % result_part.name
+                )  # pragma: no cover
 
     table = pa.Table.from_batches(
         record_batches, schema=ACCUMULATED_SCHEMA if accumulated else ARROW_SCHEMA
