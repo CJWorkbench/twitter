@@ -6,7 +6,6 @@
   "description" : "Load tweets and metadata for a user, a list of users or keyword search.",
   "loads_data": true,
   "help_url":"modules/add-data/twitter",
-  "parameters_version": 1,
   "parameters": [
     {
       "id_name": "twitter_credentials",
